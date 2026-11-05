@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Salon, Staff, Service, Appointment, AuthUser, CustomerProfile } from '@/types';
+import React, { useState, useEffect } from 'react';
+import { Salon, Staff, Service, Appointment, AuthUser, CustomerProfile, WorkingHours } from '@/types';
+import { initialWorkingHours } from '@/lib/dataStore';
 import { TimelineAgenda } from '@/components/TimelineAgenda';
 import { CustomerDirectory } from '@/components/CustomerDirectory';
 import { SalonSettingsMenu } from '@/components/SalonSettingsMenu';
@@ -40,11 +41,14 @@ interface BarberDashboardProps {
   services: Service[];
   appointments: Appointment[];
   customers: CustomerProfile[];
+  workingHours?: WorkingHours[];
   onUpdateSalonSettings: (settings: Partial<Salon>) => void;
   onAddService: (newService: Omit<Service, 'id' | 'salonId' | 'isActive'>) => void;
   onDeleteService: (serviceId: string) => void;
   onAddStaff: (name: string, title: string, email: string) => void;
   onDeleteStaff: (staffId: string) => void;
+  onUpdateStaffOffDays?: (staffId: string, weeklyOffDays: number[], leaveDates: string[]) => void;
+  onUpdateWorkingHours?: (hours: WorkingHours[]) => void;
   onUpdateAppointmentStatus: (aptId: string, newStatus: Appointment['status']) => void;
   onAddQuickAppointment: (apt: Omit<Appointment, 'id' | 'createdAt'>) => void;
   onAddCustomer: (newCustomer: Omit<CustomerProfile, 'id' | 'createdAt'>) => void;
@@ -59,11 +63,14 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
   services,
   appointments,
   customers,
+  workingHours,
   onUpdateSalonSettings,
   onAddService,
   onDeleteService,
   onAddStaff,
   onDeleteStaff,
+  onUpdateStaffOffDays,
+  onUpdateWorkingHours,
   onUpdateAppointmentStatus,
   onAddQuickAppointment,
   onAddCustomer,
@@ -73,8 +80,21 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
   const isOwner = currentUser.role === 'barber_owner' || currentUser.role === 'admin';
   const staffId = currentUser.role === 'barber_staff' ? currentUser.staffId : undefined;
 
-  const [activeTab, setActiveTab] = useState<'agenda' | 'customers' | 'services' | 'staff' | 'settings' | 'finance' | 'qrcode' | 'profile'>('agenda');
+  const [activeTab, setActiveTab] = useState<'agenda' | 'customers' | 'services' | 'staff' | 'settings' | 'finance' | 'qrcode' | 'profile' | 'hours'>('agenda');
   const [calendarDate, setCalendarDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // Çalışma Saatleri State
+  const [hoursList, setHoursList] = useState<WorkingHours[]>(workingHours && workingHours.length > 0 ? workingHours : initialWorkingHours);
+  const [hoursSavedSuccess, setHoursSavedSuccess] = useState(false);
+
+  useEffect(() => {
+    if (workingHours && workingHours.length > 0) {
+      setHoursList(workingHours);
+    }
+  }, [workingHours]);
+
+  // Personel Özel İzin Tarihi Input State
+  const [newLeaveDates, setNewLeaveDates] = useState<{ [staffId: string]: string }>({});
 
   // Yeni Hizmet Ekleme Form State
   const [newServiceName, setNewServiceName] = useState('');
@@ -89,6 +109,105 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
 
   // Karekod Kopyalama Durumu
   const [copiedQrLink, setCopiedQrLink] = useState(false);
+
+  // ⚡ Hafta içi tek tıkla 08:00 - 21:00 (Öğle Molası 13:00 - 14:00) şablonu uygula
+  const handleApplyWeekday08To21 = () => {
+    const updated: WorkingHours[] = [0, 1, 2, 3, 4, 5, 6].map((day) => {
+      if (day >= 1 && day <= 6) {
+        return {
+          id: `wh-${day}`,
+          salonId: salon.id,
+          dayOfWeek: day,
+          startTime: '08:00',
+          endTime: '21:00',
+          breakStart: '13:00',
+          breakEnd: '14:00',
+          isClosed: false,
+        };
+      }
+      return {
+        id: `wh-0`,
+        salonId: salon.id,
+        dayOfWeek: 0,
+        startTime: '10:00',
+        endTime: '18:00',
+        isClosed: true,
+      };
+    });
+
+    setHoursList(updated);
+    if (onUpdateWorkingHours) {
+      onUpdateWorkingHours(updated);
+    }
+    setHoursSavedSuccess(true);
+    setTimeout(() => setHoursSavedSuccess(false), 3000);
+  };
+
+  const handleUpdateDayHour = (dayOfWeek: number, patch: Partial<WorkingHours>) => {
+    const existing = hoursList.find((h) => h.dayOfWeek === dayOfWeek) || {
+      id: `wh-${dayOfWeek}`,
+      salonId: salon.id,
+      dayOfWeek,
+      startTime: '08:00',
+      endTime: '21:00',
+      breakStart: '13:00',
+      breakEnd: '14:00',
+      isClosed: false,
+    };
+
+    const updated = [0, 1, 2, 3, 4, 5, 6].map((d) => {
+      if (d === dayOfWeek) {
+        return { ...existing, ...patch };
+      }
+      const found = hoursList.find((h) => h.dayOfWeek === d);
+      return found || {
+        id: `wh-${d}`,
+        salonId: salon.id,
+        dayOfWeek: d,
+        startTime: '08:00',
+        endTime: '21:00',
+        breakStart: '13:00',
+        breakEnd: '14:00',
+        isClosed: d === 0,
+      };
+    });
+
+    setHoursList(updated);
+    if (onUpdateWorkingHours) {
+      onUpdateWorkingHours(updated);
+    }
+    setHoursSavedSuccess(true);
+    setTimeout(() => setHoursSavedSuccess(false), 2000);
+  };
+
+  // Personel İzin Yönetimi
+  const handleToggleStaffWeeklyOff = (st: Staff, dayIndex: number) => {
+    const currentDays = st.weeklyOffDays || [];
+    const exists = currentDays.includes(dayIndex);
+    const updated = exists ? currentDays.filter((d) => d !== dayIndex) : [...currentDays, dayIndex];
+    if (onUpdateStaffOffDays) {
+      onUpdateStaffOffDays(st.id, updated, st.leaveDates || []);
+    }
+  };
+
+  const handleAddStaffLeaveDate = (st: Staff) => {
+    const dateToAdd = newLeaveDates[st.id];
+    if (!dateToAdd) return;
+    const currentDates = st.leaveDates || [];
+    if (currentDates.includes(dateToAdd)) return;
+    const updated = [...currentDates, dateToAdd].sort();
+    if (onUpdateStaffOffDays) {
+      onUpdateStaffOffDays(st.id, st.weeklyOffDays || [], updated);
+    }
+    setNewLeaveDates((prev) => ({ ...prev, [st.id]: '' }));
+  };
+
+  const handleRemoveStaffLeaveDate = (st: Staff, dateToRemove: string) => {
+    const updated = (st.leaveDates || []).filter((d) => d !== dateToRemove);
+    if (onUpdateStaffOffDays) {
+      onUpdateStaffOffDays(st.id, st.weeklyOffDays || [], updated);
+    }
+  };
 
   const handleCreateService = (e: React.FormEvent) => {
     e.preventDefault();
@@ -251,7 +370,19 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
               }`}
             >
               <Users className="w-4 h-4" />
-              <span>Personeller & Koltuklar ({staffList.length})</span>
+              <span>Personeller & İzinler ({staffList.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('hours')}
+              className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
+                activeTab === 'hours'
+                  ? 'border-slate-900 text-slate-900'
+                  : 'border-transparent text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>Çalışma Saatleri & Mola</span>
             </button>
 
             <button
@@ -626,25 +757,264 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
             </form>
           </div>
 
-          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 space-y-3 shadow-xs">
-            <h3 className="text-sm font-bold text-slate-900">Salon Ekibi & Koltuklar ({staffList.length})</h3>
-            <div className="divide-y divide-slate-100">
-              {staffList.map((st) => (
-                <div key={st.id} className="py-3 flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-bold text-slate-900">{st.name}</div>
-                    <div className="text-slate-500 text-[11px] mt-0.5">
-                      {st.title} • {st.email || 'E-posta atanmadı'} • Prim: %{st.commissionRate || 40}
+          <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Salon Ekibi & İzin Yönetimi ({staffList.length})</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Ustaların haftalık izin günlerini ve gelmediği özel tarihleri belirleyin. İzinli günlerde randevu otomatik kilitlenir.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 divide-y divide-slate-100">
+              {staffList.map((st) => {
+                const dayPills = [
+                  { label: 'Paz', idx: 0 },
+                  { label: 'Pzt', idx: 1 },
+                  { label: 'Sal', idx: 2 },
+                  { label: 'Çar', idx: 3 },
+                  { label: 'Per', idx: 4 },
+                  { label: 'Cum', idx: 5 },
+                  { label: 'Cmt', idx: 6 },
+                ];
+
+                return (
+                  <div key={st.id} className="pt-4 first:pt-0 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-slate-900 text-white font-bold flex items-center justify-center text-xs">
+                          {st.name.charAt(0)}
+                        </div>
+                        <div>
+                          <div className="font-bold text-slate-900 text-xs">{st.name}</div>
+                          <div className="text-slate-500 text-[11px]">
+                            {st.title} • {st.email || 'E-posta atanmadı'} • Prim: %{st.commissionRate || 40}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => onDeleteStaff(st.id)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded transition"
+                        title="Personeli Sil"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Haftalık İzin Günleri Seçimi */}
+                    <div className="bg-slate-50 rounded-xl p-3 border border-slate-200/80 space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-semibold text-slate-700">Haftalık Sabit İzin Günleri:</span>
+                        <span className="text-[10px] text-slate-400">Turuncu olan günlerde dükkanda yok</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {dayPills.map((d) => {
+                          const isOff = (st.weeklyOffDays || []).includes(d.idx);
+                          return (
+                            <button
+                              key={d.idx}
+                              type="button"
+                              onClick={() => handleToggleStaffWeeklyOff(st, d.idx)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                                isOff
+                                  ? 'bg-amber-500 text-white shadow-xs'
+                                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                              }`}
+                              title={isOff ? `${d.label}: İzinli gün (Randevu alınamaz)` : `${d.label}: Çalışıyor`}
+                            >
+                              {d.label} {isOff ? '🏖️' : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Özel Tarih İzni / Gelmediği Günler */}
+                      <div className="pt-2 border-t border-slate-200/60 mt-2 space-y-2">
+                        <div className="text-[11px] font-semibold text-slate-700 flex items-center justify-between">
+                          <span>Gelmeyeceği / İzinli Özel Tarih Ekle:</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            value={newLeaveDates[st.id] || ''}
+                            onChange={(e) => setNewLeaveDates((prev) => ({ ...prev, [st.id]: e.target.value }))}
+                            className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-slate-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAddStaffLeaveDate(st)}
+                            disabled={!newLeaveDates[st.id]}
+                            className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white font-bold text-xs transition flex items-center gap-1"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> İzin Ekle
+                          </button>
+                        </div>
+
+                        {/* Eklenen İzin Tarihleri Badgeleri */}
+                        {st.leaveDates && st.leaveDates.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {st.leaveDates.map((ld) => (
+                              <span
+                                key={ld}
+                                className="inline-flex items-center gap-1.5 bg-rose-50 border border-rose-200 text-rose-700 px-2.5 py-0.5 rounded-md text-[11px] font-mono font-medium"
+                              >
+                                <span>📅 {ld} (Gelmedi)</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveStaffLeaveDate(st, ld)}
+                                  className="text-rose-400 hover:text-rose-700 font-bold ml-1 text-xs"
+                                  title="İzni Kaldır"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => onDeleteStaff(st.id)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 rounded transition"
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* H) ÇALIŞMA SAATLERİ & MOLA DÜZENİ */}
+      {isOwner && activeTab === 'hours' && (
+        <div className="max-w-4xl mx-auto space-y-6">
+          {/* ÜST BİLGİ VE HIZLI ŞABLON BUTONU */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center font-bold">
+                  <Clock className="w-4 h-4" />
+                </span>
+                <h3 className="text-base font-extrabold text-slate-900">Çalışma Saatleri & Mola Düzeni</h3>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 max-w-lg">
+                Müşterilerin randevu alabileceği salon açılış-kapanış saatlerini ve öğle molasını belirleyin. Mola saatlerinde müşterilere randevu slotu açılmaz.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleApplyWeekday08To21}
+              className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition shadow-xs flex items-center gap-2 shrink-0"
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>⚡ Hafta İçi 08:00 - 21:00 Uygula (Mola: 13:00 - 14:00)</span>
+            </button>
+          </div>
+
+          {hoursSavedSuccess && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl text-xs font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              Çalışma saatleri ve mola düzeni başarıyla kaydedildi! Randevu takvimi güncellendi.
+            </div>
+          )}
+
+          {/* GÜN BAZLI ÇALIŞMA SAATLERİ LİSTESİ */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-3">
+            <div className="grid grid-cols-1 divide-y divide-slate-100">
+              {[
+                { day: 1, name: 'Pazartesi' },
+                { day: 2, name: 'Salı' },
+                { day: 3, name: 'Çarşamba' },
+                { day: 4, name: 'Perşembe' },
+                { day: 5, name: 'Cuma' },
+                { day: 6, name: 'Cumartesi' },
+                { day: 0, name: 'Pazar' },
+              ].map((item) => {
+                const wh = hoursList.find((h) => h.dayOfWeek === item.day) || {
+                  id: `wh-${item.day}`,
+                  salonId: salon.id,
+                  dayOfWeek: item.day,
+                  startTime: '08:00',
+                  endTime: '21:00',
+                  breakStart: '13:00',
+                  breakEnd: '14:00',
+                  isClosed: item.day === 0,
+                };
+
+                return (
+                  <div
+                    key={item.day}
+                    className={`py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                      wh.isClosed ? 'opacity-60 bg-slate-50/50 px-3 rounded-xl' : ''
+                    }`}
                   >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                    <div className="w-36">
+                      <div className="font-bold text-slate-900 text-xs">{item.name}</div>
+                      <div className="text-[11px] font-semibold mt-0.5">
+                        {wh.isClosed ? (
+                          <span className="text-rose-600">Kapalı</span>
+                        ) : (
+                          <span className="text-emerald-700">Açık • {wh.startTime} - {wh.endTime}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Açık / Kapalı Toggle */}
+                    <div className="flex items-center gap-3">
+                      <label className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!wh.isClosed}
+                          onChange={(e) => handleUpdateDayHour(item.day, { isClosed: !e.target.checked })}
+                          className="rounded text-slate-900 focus:ring-0 w-4 h-4"
+                        />
+                        <span>{wh.isClosed ? 'Dükkan Kapalı' : 'Dükkan Açık'}</span>
+                      </label>
+                    </div>
+
+                    {/* Saat Seçimleri (Açık ise) */}
+                    {!wh.isClosed && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {/* Açılış & Kapanış */}
+                        <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+                          <span className="text-slate-500 font-medium">Mesai:</span>
+                          <input
+                            type="time"
+                            value={wh.startTime}
+                            onChange={(e) => handleUpdateDayHour(item.day, { startTime: e.target.value })}
+                            className="bg-transparent font-bold text-slate-900 focus:outline-none"
+                          />
+                          <span className="text-slate-400">-</span>
+                          <input
+                            type="time"
+                            value={wh.endTime}
+                            onChange={(e) => handleUpdateDayHour(item.day, { endTime: e.target.value })}
+                            className="bg-transparent font-bold text-slate-900 focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Öğle / Dinlenme Molası */}
+                        <div className="flex items-center gap-1 bg-amber-50/80 border border-amber-200/80 rounded-lg px-2 py-1">
+                          <span className="text-amber-800 font-medium">☕ Mola:</span>
+                          <input
+                            type="time"
+                            value={wh.breakStart || '13:00'}
+                            onChange={(e) => handleUpdateDayHour(item.day, { breakStart: e.target.value })}
+                            className="bg-transparent font-bold text-amber-950 focus:outline-none"
+                          />
+                          <span className="text-amber-500">-</span>
+                          <input
+                            type="time"
+                            value={wh.breakEnd || '14:00'}
+                            onChange={(e) => handleUpdateDayHour(item.day, { breakEnd: e.target.value })}
+                            className="bg-transparent font-bold text-amber-950 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

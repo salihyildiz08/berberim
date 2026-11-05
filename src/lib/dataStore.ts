@@ -37,6 +37,8 @@ export const initialStaff: Staff[] = [
     phone: '0532 999 11 22',
     isActive: true,
     commissionRate: 50,
+    weeklyOffDays: [0], // Pazar izinli
+    leaveDates: [],
   },
   {
     id: 'staff-2',
@@ -47,6 +49,8 @@ export const initialStaff: Staff[] = [
     phone: '0533 888 33 44',
     isActive: true,
     commissionRate: 40,
+    weeklyOffDays: [1], // Pazartesi izinli
+    leaveDates: [],
   },
   {
     id: 'staff-3',
@@ -57,6 +61,8 @@ export const initialStaff: Staff[] = [
     phone: '0535 777 55 66',
     isActive: true,
     commissionRate: 40,
+    weeklyOffDays: [2], // Salı izinli
+    leaveDates: [],
   },
 ];
 
@@ -68,12 +74,12 @@ export const initialServices: Service[] = [
 ];
 
 export const initialWorkingHours: WorkingHours[] = [
-  { id: 'wh-1', salonId: 'salon-1', dayOfWeek: 1, startTime: '09:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
-  { id: 'wh-2', salonId: 'salon-1', dayOfWeek: 2, startTime: '09:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
-  { id: 'wh-3', salonId: 'salon-1', dayOfWeek: 3, startTime: '09:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
-  { id: 'wh-4', salonId: 'salon-1', dayOfWeek: 4, startTime: '09:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
-  { id: 'wh-5', salonId: 'salon-1', dayOfWeek: 5, startTime: '09:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
-  { id: 'wh-6', salonId: 'salon-1', dayOfWeek: 6, startTime: '09:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
+  { id: 'wh-1', salonId: 'salon-1', dayOfWeek: 1, startTime: '08:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
+  { id: 'wh-2', salonId: 'salon-1', dayOfWeek: 2, startTime: '08:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
+  { id: 'wh-3', salonId: 'salon-1', dayOfWeek: 3, startTime: '08:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
+  { id: 'wh-4', salonId: 'salon-1', dayOfWeek: 4, startTime: '08:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
+  { id: 'wh-5', salonId: 'salon-1', dayOfWeek: 5, startTime: '08:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
+  { id: 'wh-6', salonId: 'salon-1', dayOfWeek: 6, startTime: '08:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false },
   { id: 'wh-0', salonId: 'salon-1', dayOfWeek: 0, startTime: '10:00', endTime: '18:00', isClosed: true },
 ];
 
@@ -292,13 +298,30 @@ export function calculateAvailableSlots(
   dateStr: string,
   durationMinutes: number,
   allAppointments: Appointment[],
-  workingHours: WorkingHours[]
+  workingHours: WorkingHours[],
+  staffList?: Staff[]
 ): TimeSlot[] {
   const dateObj = new Date(dateStr);
   const dayOfWeek = dateObj.getDay();
 
+  // 1. Personel İzin & Gelmeme Kontrolü (Haftalık izin veya belirli tarih izni)
+  if (staffList && staffId) {
+    const staff = staffList.find((s) => s.id === staffId);
+    if (staff) {
+      if (staff.weeklyOffDays && staff.weeklyOffDays.includes(dayOfWeek)) {
+        return []; // Personel haftalık izinli gününde
+      }
+      if (staff.leaveDates && staff.leaveDates.includes(dateStr)) {
+        return []; // Personel bu tarihte izinli / gelmedi
+      }
+    }
+  }
+
   const wh = workingHours.find((w) => w.dayOfWeek === dayOfWeek) || {
-    startTime: '09:00',
+    id: `wh-${dayOfWeek}`,
+    salonId: 'salon-1',
+    dayOfWeek,
+    startTime: '08:00',
     endTime: '21:00',
     breakStart: '13:00',
     breakEnd: '14:00',

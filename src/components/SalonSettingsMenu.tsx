@@ -16,6 +16,7 @@ import {
   Copy,
   Check,
   Download,
+  Clock,
 } from 'lucide-react';
 
 interface SalonSettingsMenuProps {
@@ -23,7 +24,7 @@ interface SalonSettingsMenuProps {
   salon: Salon;
   staffList: Staff[];
   customers: CustomerProfile[];
-  onNavigateTab: (tab: 'agenda' | 'customers' | 'services' | 'staff' | 'finance' | 'qrcode' | 'settings') => void;
+  onNavigateTab: (tab: 'agenda' | 'customers' | 'services' | 'staff' | 'finance' | 'qrcode' | 'settings' | 'hours') => void;
   onLogout: () => void;
 }
 
@@ -200,27 +201,49 @@ export const SalonSettingsMenu: React.FC<SalonSettingsMenuProps> = ({
         </div>
       </div>
 
-      {/* 3. ALTTTAKİ AYRI KUTU: Randevu Ayarları (Referans Görsel 1) */}
+      {/* 3. ALTTTAKİ AYRI KUTULAR: Çalışma Saatleri & Randevu Ayarları */}
       {isOwner && (
-        <button
-          onClick={() => onNavigateTab('settings')}
-          className="w-full bg-white p-4 rounded-2xl border border-slate-200/90 flex items-center justify-between text-left hover:bg-slate-50 transition shadow-xs group"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
-              <Sliders className="w-4 h-4" />
+        <div className="space-y-2">
+          <button
+            onClick={() => onNavigateTab('hours')}
+            className="w-full bg-white p-4 rounded-2xl border border-slate-200/90 flex items-center justify-between text-left hover:bg-slate-50 transition shadow-xs group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
+                <Clock className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 group-hover:text-amber-700 transition">
+                  Çalışma Saatleri & Mola Düzeni
+                </h4>
+                <p className="text-[10px] text-slate-500">
+                  Sabah 08:00 - Akşam 21:00, öğle molası & gün bazlı saatler
+                </p>
+              </div>
             </div>
-            <div>
-              <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition">
-                Randevu Ayarları
-              </h4>
-              <p className="text-[10px] text-slate-500">
-                İleri tarihli randevu limiti, otomatik onay & 20 gün tıraş döngüsü
-              </p>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          </button>
+
+          <button
+            onClick={() => onNavigateTab('settings')}
+            className="w-full bg-white p-4 rounded-2xl border border-slate-200/90 flex items-center justify-between text-left hover:bg-slate-50 transition shadow-xs group"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
+                <Sliders className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 group-hover:text-blue-600 transition">
+                  Randevu Ayarları
+                </h4>
+                <p className="text-[10px] text-slate-500">
+                  İleri tarihli randevu limiti, otomatik onay & süre dolunca tamamlama
+                </p>
+              </div>
             </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-400" />
-        </button>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
+          </button>
+        </div>
       )}
     </div>
   );

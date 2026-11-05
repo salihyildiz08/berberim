@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Salon, Staff, Service, Appointment, TimeSlot, AuthUser } from '@/types';
-import { calculateAvailableSlots } from '@/lib/dataStore';
+import { Salon, Staff, Service, Appointment, TimeSlot, AuthUser, WorkingHours } from '@/types';
+import { initialWorkingHours, calculateAvailableSlots } from '@/lib/dataStore';
 import { CalendarPicker } from '@/components/CalendarPicker';
 import { CustomerAppointmentsView } from '@/components/CustomerAppointmentsView';
 import {
@@ -28,6 +28,7 @@ interface CustomerBookingProps {
   staffList: Staff[];
   services: Service[];
   appointments: Appointment[];
+  workingHours?: WorkingHours[];
   onBookAppointment: (newApt: Omit<Appointment, 'id' | 'createdAt'>) => void;
   onCancelAppointment: (aptId: string) => void;
   onLogout?: () => void;
@@ -39,6 +40,7 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
   staffList,
   services,
   appointments,
+  workingHours = initialWorkingHours,
   onBookAppointment,
   onCancelAppointment,
   onLogout,
@@ -76,15 +78,31 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
       (currentUser.name.toLowerCase().includes('can') && a.customerName.toLowerCase().includes('can'))
   );
 
+  const selectedDayOfWeek = new Date(selectedDate).getDay();
+  const selectedDayWh = workingHours.find((w) => w.dayOfWeek === selectedDayOfWeek) || {
+    id: `wh-${selectedDayOfWeek}`,
+    salonId: salon.id,
+    dayOfWeek: selectedDayOfWeek,
+    startTime: '08:00',
+    endTime: '21:00',
+    breakStart: '13:00',
+    breakEnd: '14:00',
+    isClosed: false,
+  };
+
+  const isStaffOff = selectedStaff && (
+    (selectedStaff.weeklyOffDays && selectedStaff.weeklyOffDays.includes(selectedDayOfWeek)) ||
+    (selectedStaff.leaveDates && selectedStaff.leaveDates.includes(selectedDate))
+  );
+
   const availableSlots: TimeSlot[] = selectedStaff && selectedDate && selectedService
     ? calculateAvailableSlots(
         selectedStaff.id,
         selectedDate,
         selectedService.durationMinutes,
         appointments,
-        [
-          { id: '1', salonId: salon.id, dayOfWeek: new Date(selectedDate).getDay(), startTime: '09:00', endTime: '21:00', breakStart: '13:00', breakEnd: '14:00', isClosed: false }
-        ]
+        workingHours,
+        staffList
       )
     : [];
 
@@ -355,8 +373,30 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
                   })}
                 </div>
               ) : (
-                <div className="text-center py-6 text-xs text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                  Seçilen günde müsait saat bulunamadı. Lütfen başka bir gün veya berber seçiniz.
+                <div className="py-6 px-4 rounded-2xl border text-center text-xs">
+                  {isStaffOff ? (
+                    <div className="bg-amber-50/80 border border-amber-200/80 text-amber-900 rounded-xl p-4">
+                      <div className="font-bold flex items-center justify-center gap-1.5 text-amber-900">
+                        <span>⚠️</span>
+                        <span>{selectedStaff.name} Bu Tarihte İzinlidir</span>
+                      </div>
+                      <p className="text-[11px] text-amber-700 mt-1">
+                        Ustamıza haftalık izni veya onaylı izni nedeniyle bu tarihte ({selectedDate}) randevu verilememektedir. Lütfen başka bir gün seçiniz veya diğer ustalarımızı tercih ediniz.
+                      </p>
+                    </div>
+                  ) : selectedDayWh.isClosed ? (
+                    <div className="bg-slate-100 border border-slate-200 text-slate-700 rounded-xl p-4">
+                      <div className="font-bold">🔒 Salonumuz Bu Günde Kapalıdır</div>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Haftalık çalışma takvimimize göre dükkanımız bu gün hizmet vermemektedir.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 border border-dashed border-slate-200 text-slate-500 rounded-xl p-4">
+                      <div>Tüm randevu saatleri doludur.</div>
+                      <p className="text-[11px] text-slate-400 mt-1">Lütfen farklı bir tarih seçiniz.</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

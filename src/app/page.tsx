@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UserRole, Salon, Staff, Service, Appointment, AuthUser, CustomerProfile, SystemAdmin } from '@/types';
+import { UserRole, Salon, Staff, Service, Appointment, AuthUser, CustomerProfile, SystemAdmin, WorkingHours } from '@/types';
 import {
   initialSalon,
   initialStaff,
@@ -9,6 +9,7 @@ import {
   initialAppointments,
   initialCustomers,
   initialAdmins,
+  initialWorkingHours,
 } from '@/lib/dataStore';
 import { supabase } from '@/lib/supabase';
 import { AuthScreen } from '@/components/AuthScreen';
@@ -56,6 +57,7 @@ export default function Home() {
   const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
   const [customers, setCustomers] = useState<CustomerProfile[]>(initialCustomers);
   const [admins, setAdmins] = useState<SystemAdmin[]>(initialAdmins);
+  const [workingHours, setWorkingHours] = useState<WorkingHours[]>(initialWorkingHours);
 
   const [notifications, setNotifications] = useState<PushNotification[]>([]);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
@@ -379,6 +381,18 @@ export default function Home() {
     addNotification('Kadro Güncellendi', 'Stilist kadrodan çıkarıldı.');
   };
 
+  const handleUpdateStaffOffDays = (staffId: string, weeklyOffDays: number[], leaveDates: string[]) => {
+    setStaffList((prev) =>
+      prev.map((s) => (s.id === staffId ? { ...s, weeklyOffDays, leaveDates } : s))
+    );
+    addNotification('İzin Güncellendi', 'Personelin izin günleri ve gelmediği tarihler güncellendi.');
+  };
+
+  const handleUpdateWorkingHours = (hours: WorkingHours[]) => {
+    setWorkingHours(hours);
+    addNotification('Çalışma Saatleri Güncellendi', 'Salon çalışma saatleri ve mola düzeni kaydedildi.');
+  };
+
   const handleUpdateAppointmentStatus = (aptId: string, newStatus: Appointment['status']) => {
     setAppointments((prev) =>
       prev.map((a) => (a.id === aptId ? { ...a, status: newStatus } : a))
@@ -567,6 +581,7 @@ export default function Home() {
             staffList={staffList}
             services={services}
             appointments={appointments}
+            workingHours={workingHours}
             onBookAppointment={handleBookAppointment}
             onCancelAppointment={handleCancelAppointment}
             onLogout={handleLogout}
@@ -581,11 +596,14 @@ export default function Home() {
             services={services}
             appointments={appointments}
             customers={customers}
+            workingHours={workingHours}
             onUpdateSalonSettings={handleUpdateSalonSettings}
             onAddService={handleAddService}
             onDeleteService={handleDeleteService}
             onAddStaff={handleAddStaff}
             onDeleteStaff={handleDeleteStaff}
+            onUpdateStaffOffDays={handleUpdateStaffOffDays}
+            onUpdateWorkingHours={handleUpdateWorkingHours}
             onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
             onAddQuickAppointment={handleAddQuickAppointment}
             onAddCustomer={handleAddCustomer}

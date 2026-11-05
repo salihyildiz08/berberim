@@ -39,6 +39,8 @@ export interface Staff {
   avatarUrl?: string;
   isActive: boolean;
   commissionRate?: number;
+  weeklyOffDays?: number[]; // [0: Pazar, 1: Pazartesi ... 6: Cumartesi]
+  leaveDates?: string[];    // İzinli/gelmediği tarihler (YYYY-MM-DD)
 }
 
 export interface Service {
