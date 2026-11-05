@@ -3,8 +3,8 @@
 import React, { useState } from 'react';
 import { AuthUser, SystemAdmin } from '@/types';
 import { initialStaff } from '@/lib/dataStore';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
-import { Scissors, ShieldCheck, User, Lock, Mail, Phone, ArrowRight, UserCheck, CheckCircle2, Sparkles } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { Scissors, ShieldCheck, User, ArrowRight, Loader2 } from 'lucide-react';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: AuthUser) => void;
@@ -22,79 +22,39 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, admins =
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
 
-  // 1. Google ile Giriş Yap (Supabase OAuth & Otomatik Rol Eşleştirme)
+  // 1. Gerçek Google ile Giriş Yap (Supabase OAuth)
   const handleGoogleLogin = async () => {
     setErrorMsg('');
     setLoadingGoogle(true);
 
-    if (supabase && isSupabaseConfigured()) {
-      try {
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
+    if (!supabase) {
+      setErrorMsg('Supabase bağlantısı kurulamadı.');
+      setLoadingGoogle(false);
+      return;
+    }
+
+    try {
+      const redirectUrl = typeof window !== 'undefined' ? window.location.origin : 'https://berberim-ivory.vercel.app';
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
           },
-        });
-        if (error) {
-          console.warn('Supabase Google OAuth direct call error:', error.message);
-          // Eğer Google OAuth Supabase panelinde henüz etkinleştirilmemişse, kullanıcıyı bilgilendirip simüle edelim:
-          promptGoogleMock();
-        }
-      } catch (err: any) {
-        promptGoogleMock();
+        },
+      });
+
+      if (error) {
+        setErrorMsg(`Google Giriş Hatası: ${error.message}`);
+        setLoadingGoogle(false);
       }
-    } else {
-      promptGoogleMock();
+    } catch (err: any) {
+      setErrorMsg(`Bağlantı Hatası: ${err.message || 'Google oturum açma servisine ulaşılamadı.'}`);
+      setLoadingGoogle(false);
     }
-  };
-
-  const promptGoogleMock = () => {
-    // Google ile giriş yapan kişinin e-postasını al
-    const googleEmail = window.prompt(
-      'Google Hesabınızı Girin (Örn: yldzsalih27@gmail.com veya kendi gmail adresiniz):',
-      'yldzsalih27@gmail.com'
-    );
-
-    setLoadingGoogle(false);
-    if (!googleEmail) return;
-
-    const cleanEmail = googleEmail.trim().toLowerCase();
-
-    // Süper Admin kontrolü (Salih Yıldız veya eklenen adminler)
-    const isAdmin = cleanEmail === 'yldzsalih27@gmail.com' || admins.some((a) => a.email.toLowerCase() === cleanEmail && a.isActive);
-
-    if (isAdmin) {
-      onLoginSuccess({
-        id: 'admin-google',
-        name: cleanEmail === 'yldzsalih27@gmail.com' ? 'Salih Yıldız (Süper Admin)' : 'SaaS Yöneticisi',
-        email: cleanEmail,
-        role: 'admin',
-      });
-      return;
-    }
-
-    // Personel kontrolü
-    const matchingStaff = initialStaff.find((s) => s.email.toLowerCase() === cleanEmail);
-    if (matchingStaff) {
-      onLoginSuccess({
-        id: `user-${matchingStaff.id}`,
-        name: matchingStaff.name,
-        email: matchingStaff.email,
-        role: 'barber_staff',
-        salonId: 'salon-1',
-        staffId: matchingStaff.id,
-      });
-      return;
-    }
-
-    // Normal Müşteri
-    onLoginSuccess({
-      id: `google-cust-${Date.now()}`,
-      name: cleanEmail.split('@')[0].toUpperCase(),
-      email: cleanEmail,
-      role: 'customer',
-      salonId: 'salon-1',
-    });
   };
 
   // 2. E-Posta / Şifre Girişi
@@ -178,42 +138,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, admins =
           </p>
         </div>
 
-        {/* SUPABASE CANLI BAĞLANTI DURUM ROZETİ */}
-        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2 text-emerald-900 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Supabase Veritabanı: <strong>crlduuku...co</strong></span>
-          </div>
-          <span className="text-[10px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-full">
-            Bağlandı
-          </span>
-        </div>
-
-        {/* GOOGLE İLE GİRİŞ YAP BUTONU (REFERANS GÖRSEL 4 STANDARDI) */}
+        {/* GERÇEK GOOGLE İLE GİRİŞ YAP BUTONU (REFERANS GÖRSEL 4 STANDARDI) */}
         <button
           onClick={handleGoogleLogin}
           disabled={loadingGoogle}
-          className="w-full py-3.5 px-4 rounded-2xl bg-[#151b26] hover:bg-slate-800 text-white font-bold text-xs transition flex items-center justify-center gap-3 shadow-sm group"
+          className="w-full py-3.5 px-4 rounded-2xl bg-[#151b26] hover:bg-slate-800 text-white font-bold text-xs transition flex items-center justify-center gap-3 shadow-sm group disabled:opacity-70"
         >
-          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-            />
-          </svg>
-          <span>Google ile Giriş Yap</span>
+          {loadingGoogle ? (
+            <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+          ) : (
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              />
+            </svg>
+          )}
+          <span>{loadingGoogle ? 'Google Bağlantısı Açılıyor...' : 'Google ile Giriş Yap'}</span>
         </button>
 
         <div className="relative flex py-1 items-center">
@@ -297,7 +250,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, admins =
             {/* Test İçin Hızlı Hesap Seçimi */}
             <div className="pt-3 border-t border-slate-100 space-y-1.5">
               <div className="text-[10px] font-bold text-slate-400 uppercase text-center">
-                Tek Tıkla Giriş Rolünü Test Et:
+                Hızlı Test Girişleri:
               </div>
               <div className="grid grid-cols-3 gap-1.5">
                 <button
