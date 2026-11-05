@@ -23,7 +23,14 @@ interface AdminDashboardProps {
   appointments: Appointment[];
   admins: SystemAdmin[];
   onToggleSalonStatus: (salonId: string) => void;
-  onAddSalon: (name: string, slug: string, phone: string) => void;
+  onAddSalon: (
+    name: string,
+    slug: string,
+    phone: string,
+    city?: string,
+    district?: string,
+    address?: string
+  ) => void;
   onAddAdmin: (name: string, email: string) => void;
   onToggleAdminStatus: (adminId: string) => void;
   onDeleteAdmin: (adminId: string) => void;
@@ -47,6 +54,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newSalonName, setNewSalonName] = useState('');
   const [newSalonSlug, setNewSalonSlug] = useState('');
   const [newSalonPhone, setNewSalonPhone] = useState('');
+  const [newSalonCity, setNewSalonCity] = useState('İstanbul');
+  const [newSalonDistrict, setNewSalonDistrict] = useState('Kadıköy');
+  const [newSalonAddress, setNewSalonAddress] = useState('');
 
   // Admin Ekleme Modal
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
@@ -63,16 +73,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     (s) =>
       s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       s.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.city.toLowerCase().includes(searchTerm.toLowerCase())
+      s.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.district.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleCreateSalon = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSalonName || !newSalonSlug) return;
-    onAddSalon(newSalonName, newSalonSlug, newSalonPhone || '0212 000 00 00');
+    onAddSalon(
+      newSalonName,
+      newSalonSlug,
+      newSalonPhone || '0212 000 00 00',
+      newSalonCity || 'İstanbul',
+      newSalonDistrict || 'Kadıköy',
+      newSalonAddress || `${newSalonDistrict}, ${newSalonCity}`
+    );
     setNewSalonName('');
     setNewSalonSlug('');
     setNewSalonPhone('');
+    setNewSalonCity('İstanbul');
+    setNewSalonDistrict('Kadıköy');
+    setNewSalonAddress('');
     setShowAddModal(false);
   };
 
@@ -220,8 +241,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </div>
                       </td>
                       <td className="p-4">
-                        <div>{salon.district}, {salon.city}</div>
-                        <div className="text-slate-500 text-[11px]">{salon.phone}</div>
+                        <div className="font-bold text-slate-800">{salon.district}, {salon.city}</div>
+                        {salon.address && (
+                          <div className="text-slate-500 text-[11px] truncate max-w-[200px]" title={salon.address}>
+                            📍 {salon.address}
+                          </div>
+                        )}
+                        <div className="text-slate-500 text-[11px] font-mono mt-0.5">{salon.phone}</div>
                       </td>
                       <td className="p-4">
                         <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
@@ -397,6 +423,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   value={newSalonPhone}
                   onChange={(e) => setNewSalonPhone(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3.5 py-2.5 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">İl *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="İstanbul"
+                    value={newSalonCity}
+                    onChange={(e) => setNewSalonCity(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">İlçe *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Kadıköy"
+                    value={newSalonDistrict}
+                    onChange={(e) => setNewSalonDistrict(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Açık Adres (Cadde, Sokak, No)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Örn: Bağdat Cad. No: 342/B, Suadiye"
+                  value={newSalonAddress}
+                  onChange={(e) => setNewSalonAddress(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 resize-none"
                 />
               </div>
 

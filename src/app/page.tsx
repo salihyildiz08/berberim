@@ -133,16 +133,12 @@ export default function Home() {
     setCurrentUser(user);
     if (user.role === 'admin') {
       setCurrentView('admin');
-      addNotification('SaaS Master Girişi', `Hoş geldiniz Salih Bey (Süper Admin). Tüm yetkiler aktif.`);
     } else if (user.role === 'barber_owner') {
       setCurrentView('barber');
-      addNotification('Salon Sahibi Girişi', `Hoş geldiniz Mehmet Usta. Koltuk ajandası ve müşteri havuzu aktif.`);
     } else if (user.role === 'barber_staff') {
       setCurrentView('barber');
-      addNotification('Personel Girişi', `Hoş geldiniz ${user.name}. Sadece kendi koltuğunuz ve randevularınız açıldı.`);
     } else {
       setCurrentView('customer');
-      addNotification('Giriş Başarılı', `Hoş geldiniz ${user.name}. Randevu portalı açıldı.`);
     }
   };
 
@@ -373,15 +369,22 @@ export default function Home() {
     );
   };
 
-  const handleAddSalon = (name: string, slug: string, phone: string) => {
+  const handleAddSalon = (
+    name: string,
+    slug: string,
+    phone: string,
+    city?: string,
+    district?: string,
+    address?: string
+  ) => {
     const newSalon: Salon = {
       id: `salon-${Date.now()}`,
       name,
       slug,
       phone,
-      city: 'İstanbul',
-      district: 'Kadıköy',
-      address: 'Adres tanımlanmamış',
+      city: city || 'İstanbul',
+      district: district || 'Kadıköy',
+      address: address || `${district || 'Kadıköy'}, ${city || 'İstanbul'}`,
       autoConfirm: true,
       autoComplete: true,
       isActive: true,
@@ -389,7 +392,7 @@ export default function Home() {
       createdAt: new Date().toISOString(),
     };
     setSalons((prev) => [...prev, newSalon]);
-    addNotification('Yeni Tenant', `"${name}" salonu sisteme kaydedildi.`);
+    addNotification('Yeni İşletme Kaydedildi', `"${name}" (${newSalon.district}, ${newSalon.city}) sisteme eklendi.`);
   };
 
   const handleAddAdmin = (name: string, email: string) => {
