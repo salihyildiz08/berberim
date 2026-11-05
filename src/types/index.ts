@@ -103,3 +103,12 @@ export interface TimeSlot {
   time: string;
   available: boolean;
 }
+
+export interface SystemAdmin {
+  id: string;
+  email: string;
+  name: string;
+  isPrimary?: boolean;
+  isActive: boolean;
+  createdAt: string;
+}

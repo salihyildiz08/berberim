@@ -92,6 +92,21 @@ CREATE TABLE IF NOT EXISTS public.subscriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 8. SÜPER ADMİNLER & YÖNETİCİLER
+CREATE TABLE IF NOT EXISTS public.system_admins (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    is_primary BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- İlk Kurucu Süper Admin (Salih Yıldız)
+INSERT INTO public.system_admins (email, name, is_primary, is_active)
+VALUES ('yldzsalih27@gmail.com', 'Salih Yıldız', true, true)
+ON CONFLICT (email) DO NOTHING;
+
 -- İndeksler (Hızlı sorgulama ve çakışma kontrolü için)
 CREATE INDEX IF NOT EXISTS idx_appointments_salon_date ON public.appointments(salon_id, appointment_date);
 CREATE INDEX IF NOT EXISTS idx_appointments_staff_date ON public.appointments(staff_id, appointment_date);

@@ -1,14 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UserRole, Salon, Staff, Service, Appointment, AuthUser, CustomerProfile } from '@/types';
+import { UserRole, Salon, Staff, Service, Appointment, AuthUser, CustomerProfile, SystemAdmin } from '@/types';
 import {
   initialSalon,
   initialStaff,
   initialServices,
   initialAppointments,
   initialCustomers,
+  initialAdmins,
 } from '@/lib/dataStore';
+import { supabase } from '@/lib/supabase';
 import { AuthScreen } from '@/components/AuthScreen';
 import { CustomerBooking } from '@/components/CustomerBooking';
 import { BarberDashboard } from '@/components/BarberDashboard';
@@ -52,10 +54,61 @@ export default function Home() {
   const [services, setServices] = useState<Service[]>(initialServices);
   const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
   const [customers, setCustomers] = useState<CustomerProfile[]>(initialCustomers);
+  const [admins, setAdmins] = useState<SystemAdmin[]>(initialAdmins);
 
   const [notifications, setNotifications] = useState<PushNotification[]>([]);
   const [showApiDocs, setShowApiDocs] = useState<boolean>(false);
   const [nativeNotifStatus, setNativeNotifStatus] = useState<'default' | 'granted' | 'denied'>('default');
+
+  // Supabase Google OAuth Giriş Dinleyicisi
+  useEffect(() => {
+    if (!supabase) return;
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user && !currentUser) {
+        const userEmail = session.user.email?.toLowerCase() || '';
+        const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Kullanıcı';
+
+        // Süper Admin kontrolü (Salih Yıldız veya eklenen adminler)
+        const isAdmin = userEmail === 'yldzsalih27@gmail.com' || admins.some((a) => a.email.toLowerCase() === userEmail && a.isActive);
+
+        if (isAdmin) {
+          handleLoginSuccess({
+            id: session.user.id,
+            name: userEmail === 'yldzsalih27@gmail.com' ? 'Salih Yıldız (Süper Admin)' : `${userName} (Süper Admin)`,
+            email: userEmail,
+            role: 'admin',
+          });
+        } else {
+          // Personel kontrolü
+          const matchingStaff = staffList.find((s) => s.email.toLowerCase() === userEmail);
+          if (matchingStaff) {
+            handleLoginSuccess({
+              id: session.user.id,
+              name: matchingStaff.name,
+              email: matchingStaff.email,
+              role: 'barber_staff',
+              salonId: activeSalon.id,
+              staffId: matchingStaff.id,
+            });
+          } else {
+            // Müşteri
+            handleLoginSuccess({
+              id: session.user.id,
+              name: userName,
+              email: userEmail,
+              role: 'customer',
+              salonId: activeSalon.id,
+            });
+          }
+        }
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [admins, staffList, activeSalon, currentUser]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -339,8 +392,32 @@ export default function Home() {
     addNotification('Yeni Tenant', `"${name}" salonu sisteme kaydedildi.`);
   };
 
+  const handleAddAdmin = (name: string, email: string) => {
+    const newAdmin: SystemAdmin = {
+      id: `admin-${Date.now()}`,
+      name,
+      email,
+      isPrimary: false,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+    setAdmins((prev) => [...prev, newAdmin]);
+    addNotification('Yeni Admin Eklendi', `${name} (${email}) Süper Admin yetkisiyle sisteme kaydedildi.`);
+  };
+
+  const handleToggleAdminStatus = (adminId: string) => {
+    setAdmins((prev) =>
+      prev.map((a) => (a.id === adminId && !a.isPrimary ? { ...a, isActive: !a.isActive } : a))
+    );
+  };
+
+  const handleDeleteAdmin = (adminId: string) => {
+    setAdmins((prev) => prev.filter((a) => a.id !== adminId || a.isPrimary));
+    addNotification('Admin Silindi', 'Yönetici yetkisi kaldırıldı.');
+  };
+
   if (!currentUser) {
-    return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
+    return <AuthScreen onLoginSuccess={handleLoginSuccess} admins={admins} />;
   }
 
   return (
@@ -497,8 +574,12 @@ export default function Home() {
           <AdminDashboard
             salons={salons}
             appointments={appointments}
+            admins={admins}
             onToggleSalonStatus={handleToggleSalonStatus}
             onAddSalon={handleAddSalon}
+            onAddAdmin={handleAddAdmin}
+            onToggleAdminStatus={handleToggleAdminStatus}
+            onDeleteAdmin={handleDeleteAdmin}
           />
         )}
       </main>

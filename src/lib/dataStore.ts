@@ -1,4 +1,15 @@
-import { Salon, Staff, Service, WorkingHours, Appointment, TimeSlot, CustomerProfile } from '@/types';
+import { Salon, Staff, Service, WorkingHours, Appointment, TimeSlot, CustomerProfile, SystemAdmin } from '@/types';
+
+export const initialAdmins: SystemAdmin[] = [
+  {
+    id: 'admin-1',
+    email: 'yldzsalih27@gmail.com',
+    name: 'Salih Yıldız',
+    isPrimary: true,
+    isActive: true,
+    createdAt: '2026-01-01T00:00:00Z',
+  },
+];
 
 export const initialSalon: Salon = {
   id: 'salon-1',
