@@ -203,17 +203,31 @@ export default function Home() {
 
     const interval = setInterval(() => {
       const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
       const currentH = now.getHours();
       const currentM = now.getMinutes();
       const currentTotalMin = currentH * 60 + currentM;
 
       setAppointments((prev) =>
         prev.map((apt) => {
+          // İleri bir tarihteki randevular (yarın veya gelecek günler) ASLA otomatik tamamlanamaz!
+          if (apt.appointmentDate > todayStr) {
+            return apt;
+          }
+
           if (apt.status === 'confirmed' || apt.status === 'in_chair') {
-            const [eh, em] = apt.endTime.split(':').map(Number);
-            const endTotalMin = eh * 60 + em;
-            if (currentTotalMin > endTotalMin) {
+            // Geçmiş bir günün randevusu ise tamamlandı yap
+            if (apt.appointmentDate < todayStr) {
               return { ...apt, status: 'completed' };
+            }
+
+            // Bugünün randevusu ise: sadece bitiş saati gerçekten geçmişse tamamlandı yap
+            if (apt.appointmentDate === todayStr) {
+              const [eh, em] = apt.endTime.split(':').map(Number);
+              const endTotalMin = eh * 60 + em;
+              if (currentTotalMin >= endTotalMin) {
+                return { ...apt, status: 'completed' };
+              }
             }
           }
           return apt;
@@ -513,14 +527,16 @@ export default function Home() {
 
           {/* SAĞ KULLANICI BİLGİSİ VE ÇIKIŞ */}
           <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setShowSettingsModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
-              title="Sistem & Bildirim Ayarları"
-            >
-              <Settings className="w-3.5 h-3.5 text-slate-700" />
-              <span className="hidden sm:inline">Ayarlar</span>
-            </button>
+            {currentUser.role === 'admin' && (
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+                title="Sistem & Bildirim Ayarları (Sadece Süper Admin)"
+              >
+                <Settings className="w-3.5 h-3.5 text-slate-700" />
+                <span className="hidden sm:inline">Ayarlar</span>
+              </button>
+            )}
 
             <div className="flex items-center gap-2.5 bg-slate-100 px-3 py-1.5 rounded-xl">
               <div className="w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-xs flex items-center justify-center">
