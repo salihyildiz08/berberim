@@ -24,6 +24,7 @@ import {
   LogOut,
   UserCheck,
   Bell,
+  Settings,
 } from 'lucide-react';
 
 export default function Home() {
@@ -57,7 +58,7 @@ export default function Home() {
   const [admins, setAdmins] = useState<SystemAdmin[]>(initialAdmins);
 
   const [notifications, setNotifications] = useState<PushNotification[]>([]);
-  const [showApiDocs, setShowApiDocs] = useState<boolean>(false);
+  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
   const [nativeNotifStatus, setNativeNotifStatus] = useState<'default' | 'granted' | 'denied'>('default');
 
   // Supabase Google OAuth Giriş Dinleyicisi
@@ -65,7 +66,13 @@ export default function Home() {
     if (!supabase) return;
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user && !currentUser) {
+      // Çıkış yapıldığında kullanıcıyı null yap ve asla tekrar login yapma
+      if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+        return;
+      }
+
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user && !currentUser) {
         const userEmail = session.user.email?.toLowerCase() || '';
         const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Kullanıcı';
 
@@ -142,9 +149,22 @@ export default function Home() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      if (supabase) {
+        await supabase.auth.signOut();
+      }
+    } catch (e) {
+      console.warn('Signout error:', e);
+    }
     setCurrentUser(null);
     setNotifications([]);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (e) {}
+    }
   };
 
   const addNotification = (
@@ -449,7 +469,7 @@ export default function Home() {
                     : 'MÜŞTERİ'}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-500 font-medium">B2B Salon Rezervasyon & Koltuk Takip Çözümü</p>
+              <p className="text-[10px] text-slate-500 font-medium">Randevu & Koltuk Yönetim Sistemi</p>
             </div>
           </div>
 
@@ -464,7 +484,7 @@ export default function Home() {
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <ShieldCheck className="w-3.5 h-3.5" /> SaaS Master
+                <ShieldCheck className="w-3.5 h-3.5" /> Yönetim Paneli
               </button>
 
               <button
@@ -493,28 +513,13 @@ export default function Home() {
 
           {/* SAĞ KULLANICI BİLGİSİ VE ÇIKIŞ */}
           <div className="flex items-center gap-2.5">
-            {nativeNotifStatus !== 'granted' ? (
-              <button
-                onClick={requestNativeNotification}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition"
-                title="Banka tarzı gerçek cihaz bildirimlerini aktifleştir"
-              >
-                <Bell className="w-3.5 h-3.5 text-amber-600 animate-bounce" />
-                <span className="hidden sm:inline">Banka Bildirimlerini Aç</span>
-              </button>
-            ) : (
-              <span className="hidden sm:flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                Push Aktif
-              </span>
-            )}
-
             <button
-              onClick={() => setShowApiDocs(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition"
+              onClick={() => setShowSettingsModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
+              title="Sistem & Bildirim Ayarları"
             >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Mobil API</span>
+              <Settings className="w-3.5 h-3.5 text-slate-700" />
+              <span className="hidden sm:inline">Ayarlar</span>
             </button>
 
             <div className="flex items-center gap-2.5 bg-slate-100 px-3 py-1.5 rounded-xl">
@@ -587,47 +592,91 @@ export default function Home() {
         )}
       </main>
 
-      {/* MOBİL API DOKÜMANTASYON MODALI */}
-      {showApiDocs && (
+      {/* SİSTEM & BİLDİRİM AYARLARI MODALI */}
+      {showSettingsModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 max-w-2xl w-full max-h-[85vh] overflow-y-auto space-y-4 shadow-xl">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 max-w-lg w-full max-h-[85vh] overflow-y-auto space-y-5 shadow-xl">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
-                <Smartphone className="w-5 h-5 text-slate-900" />
-                <h3 className="font-bold text-slate-900 text-base">Mobil Uygulama API Dokümantasyonu</h3>
+                <Settings className="w-5 h-5 text-slate-900" />
+                <h3 className="font-bold text-slate-900 text-base">Sistem & Bildirim Ayarları</h3>
               </div>
               <button
-                onClick={() => setShowApiDocs(false)}
-                className="text-slate-400 hover:text-slate-700"
+                onClick={() => setShowSettingsModal(false)}
+                className="text-slate-400 hover:text-slate-700 font-bold p-1 text-base"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-slate-500">
-              Flutter veya React Native mobil uygulamanız için hazır REST API uç noktaları:
-            </p>
-
-            <div className="space-y-2.5 font-mono text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="text-blue-700 font-bold">GET /api/v1/salons/{'{slug}'}</div>
-                <div className="text-slate-500 text-[11px] mt-0.5">Salon profili, stilist listesi ve hizmet menüsü.</div>
+            {/* 1. Banka Tarzı Push Bildirimleri */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-amber-600" />
+                  <span className="text-xs font-bold text-slate-900">Banka Tarzı Cihaz Bildirimleri</span>
+                </div>
+                {nativeNotifStatus === 'granted' ? (
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    🟢 Aktif
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                    İzin Bekliyor
+                  </span>
+                )}
               </div>
+              <p className="text-[11px] text-slate-500">
+                Randevu onayları, usta çağrıları ve randevuya 49 dakika kala hatırlatmaları kilit ekranınıza sesli bildirim olarak düşer.
+              </p>
+              {nativeNotifStatus !== 'granted' ? (
+                <button
+                  onClick={requestNativeNotification}
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-2"
+                >
+                  <Bell className="w-3.5 h-3.5" /> Bildirim İznini Etkinleştir
+                </button>
+              ) : (
+                <button
+                  onClick={() => addNotification('Test Bildirimi', 'Banka tarzı anlık bildirim sistemi sorunsuz çalışıyor! 💈')}
+                  className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
+                >
+                  🔔 Test Bildirimi Gönder
+                </button>
+              )}
+            </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="text-blue-700 font-bold">GET /api/v1/slots?staffId=...&date=YYYY-MM-DD&duration=45</div>
-                <div className="text-slate-500 text-[11px] mt-0.5">Seçilen tarihteki müsait slot matrisi.</div>
+            {/* 2. Mobil Uygulama REST API */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-bold text-slate-900">Mobil Uygulama API Motoru</span>
               </div>
+              <p className="text-[11px] text-slate-500">
+                Flutter veya React Native mobil uygulamanız için hazır REST API uç noktaları aktiftir:
+              </p>
+              <div className="space-y-1.5 font-mono text-[11px]">
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-blue-700 font-bold">
+                  GET /api/v1/salons/{'{slug}'}
+                </div>
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-blue-700 font-bold">
+                  GET /api/v1/slots?staffId=...&date=YYYY-MM-DD
+                </div>
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-emerald-700 font-bold">
+                  POST /api/v1/appointments
+                </div>
+              </div>
+            </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="text-emerald-700 font-bold">POST /api/v1/appointments</div>
-                <div className="text-slate-500 text-[11px] mt-0.5">Randevu oluşturur ve FCM bildirimini tetikler.</div>
+            {/* 3. Veritabanı ve Platform Durumu */}
+            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
+              <div>
+                <div className="font-bold text-slate-900">Supabase Canlı Veritabanı</div>
+                <div className="text-[11px] font-mono text-slate-500 mt-0.5">crlduukuhevovagorsce.supabase.co</div>
               </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <div className="text-blue-700 font-bold">GET /api/v1/appointments?phone=...</div>
-                <div className="text-slate-500 text-[11px] mt-0.5">Müşteri randevu geçmişi.</div>
-              </div>
+              <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-bold border border-emerald-200 text-[11px]">
+                Bağlı
+              </span>
             </div>
           </div>
         </div>
@@ -635,7 +684,7 @@ export default function Home() {
 
       {/* FOOTER */}
       <footer className="border-t border-slate-200 bg-white py-3.5 px-4 text-center text-[11px] text-slate-500">
-        Berberim SaaS Platformu • Kurumsal Randevu & Koltuk Yönetim Sistemi
+        Berberim • Kurumsal Randevu & Koltuk Yönetim Sistemi
       </footer>
     </div>
   );

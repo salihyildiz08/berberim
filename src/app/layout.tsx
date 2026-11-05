@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Berberim SaaS • Profesyonel Randevu & Salon Yönetimi',
+  title: 'Berberim • Profesyonel Randevu & Salon Yönetimi',
   description: 'Berberler ve kuaförler için akıllı, sıfır maliyetli bulut randevu sistemi',
 };
 

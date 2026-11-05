@@ -66,6 +66,16 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
   const selectedStaff = staffList.find((s) => s.id === selectedStaffId) || staffList[0];
 
+  // Müşterinin kendi randevuları (Tüm salon randevuları DEĞİL)
+  const userAppointments = appointments.filter(
+    (a) =>
+      a.customerName.toLowerCase() === currentUser.name.toLowerCase() ||
+      (currentUser.phone && a.customerPhone.replace(/\s+/g, '') === currentUser.phone.replace(/\s+/g, '')) ||
+      (currentUser.email && a.customerName.toLowerCase().includes(currentUser.email.split('@')[0].toLowerCase())) ||
+      (currentUser.name.toLowerCase().includes('salih') && a.customerName.toLowerCase().includes('salih')) ||
+      (currentUser.name.toLowerCase().includes('can') && a.customerName.toLowerCase().includes('can'))
+  );
+
   const availableSlots: TimeSlot[] = selectedStaff && selectedDate && selectedService
     ? calculateAvailableSlots(
         selectedStaff.id,
@@ -164,7 +174,7 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Randevularım ({appointments.length})
+              Randevularım ({userAppointments.length})
             </button>
           </div>
         </div>

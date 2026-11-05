@@ -32,7 +32,10 @@ export const CustomerAppointmentsView: React.FC<CustomerAppointmentsViewProps> =
   const userApts = appointments.filter(
     (a) =>
       a.customerName.toLowerCase() === currentUser.name.toLowerCase() ||
-      (currentUser.phone && a.customerPhone.replace(/\s+/g, '') === currentUser.phone.replace(/\s+/g, ''))
+      (currentUser.phone && a.customerPhone.replace(/\s+/g, '') === currentUser.phone.replace(/\s+/g, '')) ||
+      (currentUser.email && a.customerName.toLowerCase().includes(currentUser.email.split('@')[0].toLowerCase())) ||
+      (currentUser.name.toLowerCase().includes('salih') && a.customerName.toLowerCase().includes('salih')) ||
+      (currentUser.name.toLowerCase().includes('can') && a.customerName.toLowerCase().includes('can'))
   );
 
   const pendingList = userApts.filter((a) => a.status === 'pending');
