@@ -64,9 +64,20 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
 
   const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
   const [nextAutoDateStr, setNextAutoDateStr] = useState<string>('');
+  const [showServiceModal, setShowServiceModal] = useState<boolean>(false);
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
   const selectedStaff = staffList.find((s) => s.id === selectedStaffId) || staffList[0];
+  const otherStaff = staffList.filter((s) => s.id !== selectedStaff?.id);
+
+  const dayCards = [0, 1, 2, 3].map((offset) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    const dateStr = d.toISOString().split('T')[0];
+    const dayNum = d.getDate();
+    const dayName = offset === 0 ? 'Bugün' : d.toLocaleDateString('tr-TR', { weekday: 'short' });
+    return { dateStr, dayNum, dayName };
+  });
 
   // Müşterinin kendi randevuları (Tüm salon randevuları DEĞİL)
   const userAppointments = appointments.filter(
@@ -105,6 +116,8 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
         staffList
       )
     : [];
+
+  const earliestSlot = availableSlots.find((s) => s.available);
 
   const handleBookingSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,206 +165,176 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-20 md:pb-6">
-      {/* SALON AYDINLIK HEADER */}
-      <div className="bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-7 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200/60">
-                Online Randevu
-              </span>
-              <span className="text-xs text-slate-500 flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5 text-slate-400" /> {salon.address}
-              </span>
-            </div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              {salon.name}
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              İletişim: {salon.phone} • Çalışma Saatleri: 09:00 - 21:00
-            </p>
-          </div>
+    <div className="max-w-xl mx-auto space-y-5 pb-32">
+      {/* 1. ÜST BAŞLIK VE SEKME (SAYFA 3 BİREBİR) */}
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-xs text-stone-500 font-medium">Online randevu · {salon.district || 'Suadiye'}</span>
+          <h1 className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight mt-0.5">
+            {salon.name}
+          </h1>
+        </div>
 
-          <div className="flex bg-slate-100 p-1 rounded-2xl self-stretch sm:self-auto">
-            <button
-              onClick={() => setActiveTab('book')}
-              className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition ${
-                activeTab === 'book'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Randevu Al
-            </button>
-            <button
-              onClick={() => setActiveTab('my-appointments')}
-              className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs font-bold transition ${
-                activeTab === 'my-appointments'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Randevularım ({userAppointments.length})
-            </button>
-          </div>
+        <div className="flex bg-stone-200/60 p-1 rounded-2xl">
+          <button
+            onClick={() => setActiveTab('book')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+              activeTab === 'book'
+                ? 'bg-white text-stone-900 shadow-xs'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            Randevu Al
+          </button>
+          <button
+            onClick={() => setActiveTab('my-appointments')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+              activeTab === 'my-appointments'
+                ? 'bg-white text-stone-900 shadow-xs'
+                : 'text-stone-600 hover:text-stone-900'
+            }`}
+          >
+            Randevularım ({userAppointments.length})
+          </button>
         </div>
       </div>
 
       {bookingSuccess && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 text-emerald-900 space-y-1 animate-in fade-in shadow-xs">
+        <div className="bg-[#E7F6EC] border border-emerald-300 rounded-3xl p-5 text-emerald-900 space-y-1 animate-in fade-in shadow-xs">
           <div className="flex items-center gap-2.5">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             <h4 className="font-bold text-sm">Randevunuz Başarıyla Alındı!</h4>
           </div>
           <p className="text-xs text-emerald-800 pl-7">
-            Sayın <strong>{currentUser.name}</strong>, randevunuz sisteme işlendi. Randevu saatiniz yaklaşınca kilit ekranınıza bildirim gelecektir.
+            Sayın <strong>{currentUser.name}</strong>, randevunuz sisteme işlendi. Randevu saatiniz yaklaşınca bildirim gelecektir.
           </p>
-          {isRecurringEnabled && nextAutoDateStr && (
-            <div className="mt-2 pl-7 text-xs bg-white/80 p-3 rounded-xl border border-emerald-200 text-emerald-950 flex items-center gap-2">
-              <Repeat className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>
-                <strong>Akıllı Döngü Devrede:</strong> Her <strong>{recurringDays} günde bir</strong> otomatik randevu oluşturulacak. Bir sonraki tahmini randevunuz: <strong>{nextAutoDateStr} saat {selectedTime}</strong>
-              </span>
-            </div>
-          )}
         </div>
       )}
 
-      {/* 1. SEÇENEK: RANDEVU ALMA AKIŞI */}
+      {/* 1. SEÇENEK: RANDEVU ALMA AKIŞI (SAYFA 3 BİREBİR) */}
       {activeTab === 'book' && (
-        <form onSubmit={handleBookingSubmit} className="space-y-6">
-          {/* 1. HİZMET MENÜSÜ */}
-          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-slate-900 text-xs font-bold text-white flex items-center justify-center">
-                  1
+        <form onSubmit={handleBookingSubmit} className="space-y-4">
+          {/* 1. SEÇİLİ HİZMET KARTI (SAYFA 3 MOCKUP) */}
+          <div className="bg-white border border-[#EBE7DF] rounded-2xl p-4 shadow-xs">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span className="bg-[#E7F6EC] text-[#1B6E37] text-xs font-bold px-2.5 py-1 rounded-full shrink-0">
+                  1 Hizmet
                 </span>
-                <h3 className="text-sm font-bold text-slate-900">Hizmet Seçimi</h3>
+                <div>
+                  <h3 className="text-sm font-bold text-stone-900">
+                    {selectedService.name} - ₺{selectedService.price}
+                  </h3>
+                  <p className="text-xs text-stone-500 mt-0.5">
+                    {selectedService.durationMinutes} dk · {selectedStaff.name} ({selectedStaff.title.toLowerCase()})
+                  </p>
+                </div>
               </div>
-              <span className="text-[11px] text-slate-400">İşlem süresi koltuğu bloke eder</span>
+
+              <button
+                type="button"
+                onClick={() => setShowServiceModal(!showServiceModal)}
+                className="text-xs font-bold text-[#B86B35] hover:text-[#A35C2B] border border-[#B86B35]/30 hover:border-[#B86B35] px-3 py-1.5 rounded-xl transition"
+              >
+                {showServiceModal ? 'Kapat' : 'Değiştir'}
+              </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {services.map((srv) => {
-                const isSelected = selectedServiceId === srv.id;
-                return (
-                  <div
-                    key={srv.id}
-                    onClick={() => setSelectedServiceId(srv.id)}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
-                      isSelected
-                        ? 'bg-slate-50 border-slate-900 ring-1 ring-slate-900 shadow-xs'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div>
-                      <div className="flex justify-between items-start gap-2">
-                        <h4 className="font-bold text-slate-900 text-sm">{srv.name}</h4>
-                        <span className="text-xs font-bold text-slate-900 shrink-0">
-                          {srv.price > 0 ? `${srv.price} TL` : 'Fiyatsız'}
-                        </span>
-                      </div>
-                      {srv.description && (
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                          {srv.description}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
-                      <Clock className="w-3.5 h-3.5 text-slate-400" />
-                      <span>{srv.durationMinutes} Dakika</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* 2. STİLİST SEÇİMİ */}
-          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-slate-900 text-xs font-bold text-white flex items-center justify-center">
-                  2
-                </span>
-                <h3 className="text-sm font-bold text-slate-900">Berber / Stilist</h3>
-              </div>
-              <span className="text-[11px] text-slate-400">Tercih ettiğiniz usta</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {staffList.map((st) => {
-                const isSelected = selectedStaffId === st.id;
-                return (
-                  <div
-                    key={st.id}
-                    onClick={() => setSelectedStaffId(st.id)}
-                    className={`p-4 rounded-2xl border cursor-pointer transition-all text-center flex flex-col items-center justify-center ${
-                      isSelected
-                        ? 'bg-slate-50 border-slate-900 ring-1 ring-slate-900 shadow-xs'
-                        : 'bg-white border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div
-                      className={`w-12 h-12 rounded-full font-bold flex items-center justify-center text-sm mb-2 transition-colors ${
-                        isSelected
-                          ? 'bg-slate-900 text-white'
-                          : 'bg-slate-100 text-slate-700'
+            {/* Hizmet Değiştirme Paneli (Açılırsa) */}
+            {showServiceModal && (
+              <div className="mt-4 pt-4 border-t border-stone-100 space-y-2 animate-in fade-in">
+                <div className="text-xs font-bold text-stone-700 mb-2">Hizmet Seçin:</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {services.map((srv) => (
+                    <button
+                      type="button"
+                      key={srv.id}
+                      onClick={() => {
+                        setSelectedServiceId(srv.id);
+                        setShowServiceModal(false);
+                      }}
+                      className={`text-left p-3 rounded-xl border transition ${
+                        selectedServiceId === srv.id
+                          ? 'border-[#B86B35] bg-[#FAF3EE]'
+                          : 'border-stone-200 hover:border-stone-300 bg-white'
                       }`}
                     >
-                      {st.name.charAt(0)}
-                    </div>
-                    <div className="font-bold text-slate-900 text-xs leading-snug">{st.name}</div>
-                    <div className="text-[11px] text-slate-500 mt-0.5">{st.title}</div>
-                  </div>
+                      <div className="flex justify-between items-center text-xs font-bold">
+                        <span className="text-stone-900">{srv.name}</span>
+                        <span className="text-[#B86B35]">₺{srv.price}</span>
+                      </div>
+                      <span className="text-[11px] text-stone-500">{srv.durationMinutes} dakika</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 2. EN YAKIN MÜSAİT BANNERI (SAYFA 3 MOCKUP - #B86B35 KARAMEL BANNER) */}
+          {earliestSlot && (
+            <div className="bg-[#B86B35] text-white rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-2.5">
+                <Sparkles className="w-4 h-4 text-amber-200 shrink-0" />
+                <span className="text-xs font-medium">
+                  En yakın müsait: <strong className="font-bold underline decoration-amber-200/50">Bugün {earliestSlot.time}</strong> · {selectedStaff.name}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDate(new Date().toISOString().split('T')[0]);
+                  setSelectedTime(earliestSlot.time);
+                }}
+                className="bg-white text-[#B86B35] hover:bg-stone-50 font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition shrink-0"
+              >
+                Seç
+              </button>
+            </div>
+          )}
+
+          {/* 3. TARİH VE SAAT BÖLÜMÜ (SAYFA 3 MOCKUP) */}
+          <div className="bg-white border border-[#EBE7DF] rounded-2xl p-5 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-stone-900">3 Tarih ve saat</h3>
+              <span className="text-xs text-stone-400 font-medium">Canlı koltuk takvimi</span>
+            </div>
+
+            {/* 4 GÜN YATAY KARTLARI (Bugün 6, Cmt 7, Paz 8, Pzt 9...) */}
+            <div className="grid grid-cols-4 gap-2">
+              {dayCards.map((dc) => {
+                const isSelected = selectedDate === dc.dateStr;
+                return (
+                  <button
+                    key={dc.dateStr}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDate(dc.dateStr);
+                      setSelectedTime('');
+                    }}
+                    className={`py-3 px-2 rounded-xl text-center border transition ${
+                      isSelected
+                        ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-xs font-bold'
+                        : 'bg-stone-50/70 border-stone-200 text-stone-700 hover:bg-stone-100 font-medium'
+                    }`}
+                  >
+                    <div className="text-xs">{dc.dayName}</div>
+                    <div className="text-base font-extrabold mt-0.5">{dc.dayNum}</div>
+                  </button>
                 );
               })}
             </div>
-          </div>
 
-          {/* 3. İNTERAKTİF TAKVİM & SAAT SEÇİMİ */}
-          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 space-y-5 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-slate-900 text-xs font-bold text-white flex items-center justify-center">
-                  3
-                </span>
-                <h3 className="text-sm font-bold text-slate-900">Tarih & Saat Seçimi</h3>
-              </div>
-              <span className="text-[11px] text-slate-400">Canlı Koltuk Durumu</span>
-            </div>
-
-            {/* İnteraktif Takvim Seçici */}
+            {/* SAAT SLOTLARI (6-Slot Grid) */}
             <div>
-              <label className="block text-slate-700 font-semibold mb-2 text-xs">
-                Randevu Tarihini Seçin
-              </label>
-              <CalendarPicker
-                selectedDate={selectedDate}
-                onSelectDate={(date) => {
-                  setSelectedDate(date);
-                  setSelectedTime('');
-                }}
-              />
-            </div>
-
-            {/* Müsait Saat Dilimleri (Slots) */}
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-slate-700 font-semibold text-xs">
-                  {selectedStaff.name} için Müsait Saatler
-                </label>
-                <span className="text-[11px] font-mono font-medium text-slate-500">
-                  {availableSlots.filter((s) => s.available).length} boş slot
-                </span>
+              <div className="flex items-center justify-between text-xs text-stone-500 mb-2.5 font-medium">
+                <span>{selectedStaff.name} için müsait saatler</span>
+                <span className="font-mono text-stone-400">{availableSlots.filter(s => s.available).length} boş slot</span>
               </div>
 
               {availableSlots.length > 0 ? (
-                <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                  {availableSlots.map((slot) => {
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {availableSlots.slice(0, 12).map((slot) => {
                     const isSelected = selectedTime === slot.time;
                     return (
                       <button
@@ -359,12 +342,12 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
                         key={slot.time}
                         disabled={!slot.available}
                         onClick={() => setSelectedTime(slot.time)}
-                        className={`py-2 px-1 text-center rounded-xl text-xs font-mono font-semibold transition border ${
+                        className={`py-2.5 px-2 text-center rounded-xl text-xs font-mono font-bold transition border ${
                           !slot.available
-                            ? 'bg-slate-100 text-slate-400 border-slate-200/60 cursor-not-allowed line-through'
+                            ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed line-through'
                             : isSelected
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-xs ring-1 ring-slate-900'
-                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                            ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-sm'
+                            : 'bg-white text-stone-800 border-stone-200 hover:border-stone-400'
                         }`}
                       >
                         {slot.time}
@@ -373,146 +356,46 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
                   })}
                 </div>
               ) : (
-                <div className="py-6 px-4 rounded-2xl border text-center text-xs">
-                  {isStaffOff ? (
-                    <div className="bg-amber-50/80 border border-amber-200/80 text-amber-900 rounded-xl p-4">
-                      <div className="font-bold flex items-center justify-center gap-1.5 text-amber-900">
-                        <span>⚠️</span>
-                        <span>{selectedStaff.name} Bu Tarihte İzinlidir</span>
-                      </div>
-                      <p className="text-[11px] text-amber-700 mt-1">
-                        Ustamıza haftalık izni veya onaylı izni nedeniyle bu tarihte ({selectedDate}) randevu verilememektedir. Lütfen başka bir gün seçiniz veya diğer ustalarımızı tercih ediniz.
-                      </p>
-                    </div>
-                  ) : selectedDayWh.isClosed ? (
-                    <div className="bg-slate-100 border border-slate-200 text-slate-700 rounded-xl p-4">
-                      <div className="font-bold">🔒 Salonumuz Bu Günde Kapalıdır</div>
-                      <p className="text-[11px] text-slate-500 mt-1">
-                        Haftalık çalışma takvimimize göre dükkanımız bu gün hizmet vermemektedir.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="bg-slate-50 border border-dashed border-slate-200 text-slate-500 rounded-xl p-4">
-                      <div>Tüm randevu saatleri doludur.</div>
-                      <p className="text-[11px] text-slate-400 mt-1">Lütfen farklı bir tarih seçiniz.</p>
-                    </div>
-                  )}
+                <div className="py-6 px-4 rounded-xl border border-dashed border-stone-200 text-center text-xs text-stone-500">
+                  Bu tarihte müsait saat bulunmamaktadır.
                 </div>
               )}
+            </div>
+
+            {/* USTA DEĞİŞTİR LİNKİ (SAYFA 3 MOCKUP) */}
+            <div className="pt-2 text-xs text-stone-500 border-t border-stone-100 flex items-center flex-wrap gap-1.5">
+              <span>Usta değiştir:</span>
+              {otherStaff.map((st, idx) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => setSelectedStaffId(st.id)}
+                  className="font-bold text-[#B86B35] hover:underline"
+                >
+                  {st.name}{idx < otherStaff.length - 1 ? ',' : ''}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* 4. İLETİŞİM BİLGİLERİ (GİRİŞ YAPAN KULLANICIDAN OTOMATİK DOLDURULUR) */}
-          <div className="bg-white border border-slate-200/90 rounded-3xl p-6 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-slate-900 text-xs font-bold text-white flex items-center justify-center">
-                  4
-                </span>
-                <h3 className="text-sm font-bold text-slate-900">İletişim Bilgileriniz</h3>
-              </div>
-              <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5" /> Otomatik Doğrulandı
-              </span>
-            </div>
-
-            {/* Müşteri Giriş Yapmış Olduğu İçin Form Tekrar İstenmez! */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-slate-900 text-white font-bold flex items-center justify-center text-sm shadow-xs">
-                  {currentUser.name.charAt(0)}
+          {/* SABİT ALT CHECKOUT ÇUBUĞU (SAYFA 3 MOCKUP - STICKY BAR) */}
+          <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-[#EBE7DF] p-3 sm:p-4 shadow-lg z-30">
+            <div className="max-w-xl mx-auto flex items-center justify-between gap-4">
+              <div>
+                <div className="text-xs text-stone-500 font-medium">
+                  {selectedDate === new Date().toISOString().split('T')[0] ? 'Bugün' : selectedDate} {selectedTime || '--:--'} · {selectedStaff.name}
                 </div>
-                <div>
-                  <div className="text-xs text-slate-500">Randevu Sahibi</div>
-                  <div className="text-sm font-bold text-slate-900">{currentUser.name}</div>
-                  <div className="text-xs text-slate-500 font-mono">{currentUser.phone || '0544 222 33 44'}</div>
+                <div className="text-xl font-black text-stone-900 tracking-tight">
+                  ₺{selectedService.price}
                 </div>
               </div>
 
-              <span className="text-[11px] font-semibold text-slate-500 bg-white px-3 py-1 rounded-lg border border-slate-200">
-                Kayıtlı Profil
-              </span>
-            </div>
-
-            {/* 🔄 OTOMATİK PERİYODİK TIRAŞ DÖNGÜSÜ (Örn: Her 20 Günde 1 Tıraş) */}
-            <div className="bg-amber-50/70 border border-amber-200/80 rounded-2xl p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center font-bold shrink-0 mt-0.5">
-                    <Repeat className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900">
-                      Otomatik Tıraş Döngüsü (Akıllı Periyodik Randevu)
-                    </h4>
-                    <p className="text-[11px] text-slate-600 mt-0.5">
-                      Saçınız uzadığında sıra beklemeden aynı saatte koltuğunuz otomatik rezerve edilsin.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setIsRecurringEnabled(!isRecurringEnabled)}
-                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                    isRecurringEnabled ? 'bg-slate-900' : 'bg-slate-300'
-                  }`}
-                >
-                  <span
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      isRecurringEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {isRecurringEnabled && (
-                <div className="pt-2 border-t border-amber-200/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs animate-in fade-in">
-                  <span className="font-semibold text-slate-800">Tıraş Döngünüz:</span>
-                  <div className="flex gap-2">
-                    {[14, 20, 30].map((days) => (
-                      <button
-                        key={days}
-                        type="button"
-                        onClick={() => setRecurringDays(days)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                          recurringDays === days
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-xs'
-                            : 'bg-white border-amber-200 text-slate-700 hover:bg-amber-100'
-                        }`}
-                      >
-                        Her {days} Günde Bir
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Opsiyonel Not */}
-            <div>
-              <label className="block text-slate-700 font-semibold mb-1 text-xs">Berbere Not (Opsiyonel)</label>
-              <input
-                type="text"
-                placeholder="Örn: Yanlar 2 numara olsun, ense düz kesilsin..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900"
-              />
-            </div>
-
-            <div className="pt-1">
               <button
                 type="submit"
                 disabled={!selectedTime}
-                className="w-full py-3.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm tracking-wide transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="bg-[#B86B35] hover:bg-[#A35C2B] disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm px-6 py-3 rounded-xl transition shadow-xs flex items-center gap-2"
               >
-                <span>Randevuyu Kesinleştir</span>
-                {selectedTime && (
-                  <span className="text-xs bg-white/20 px-2 py-0.5 rounded font-mono font-bold">
-                    {selectedDate} • {selectedTime}
-                  </span>
-                )}
+                <span>Randevuyu onayla</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

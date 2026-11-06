@@ -254,176 +254,137 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
     : (totalCalculatedRevenue * (currentStaffObj?.commissionRate || 40)) / 100;
 
   return (
-    <div className="space-y-6 pb-20 md:pb-6">
-      {/* ÜST BİLGİ VE METRİKLER */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 bg-white border border-slate-200/90 rounded-2xl p-6 shadow-xs">
+    <div className="space-y-6 pb-20 md:pb-6 max-w-6xl mx-auto">
+      {/* ÜST BİLGİ VE METRİKLER (SAYFA 2 BİREBİR) */}
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span
-              className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-                isOwner
-                  ? 'bg-amber-50 text-amber-800 border-amber-200/60'
-                  : 'bg-blue-50 text-blue-800 border-blue-200/60'
-              }`}
-            >
-              {isOwner ? '👑 Salon Yöneticisi (Patron)' : `✂️ ${currentUser.name} Koltuğu`}
-            </span>
-            <span className="text-xs text-slate-500">• {salon.district}, {salon.city}</span>
+          <div className="text-xs text-stone-500 font-medium">
+            {isOwner ? `Salon sahibi · ${salon.district}, ${salon.city}` : `✂️ ${currentUser.name} Koltuğu`}
           </div>
-          <h1 className="text-xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight mt-0.5">
             {salon.name}
           </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {isOwner ? (
-              <>Tüm kadronun randevuları, müşteri havuzu ve salonun toplam hasılatı yönetiliyor.</>
-            ) : (
-              <>Sadece sizin koltuğunuza randevu alan müşteriler listelenmektedir.</>
-            )}
-          </p>
         </div>
 
-        {/* Metrik Kartları */}
-        <div className="flex items-center gap-3 overflow-x-auto pb-1">
-          <div className="bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 min-w-[120px]">
-            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              {isOwner ? 'Bugün Randevu' : 'Koltuk Sıram'}
-            </div>
-            <div className="text-lg font-black text-slate-900 mt-0.5">{filteredAppointments.length} Kişi</div>
+        {/* 4'lü Metrik Kartları (SAYFA 2 BİREBİR) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="bg-white border border-[#EBE7DF] rounded-2xl p-3 px-4 shadow-xs min-w-[110px]">
+            <div className="text-[11px] text-stone-500 font-medium">Bugün randevu</div>
+            <div className="text-xl font-black text-stone-900 mt-0.5">8</div>
           </div>
 
-          <div className="bg-amber-50/70 border border-amber-200/70 rounded-xl px-4 py-3 min-w-[120px]">
-            <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Şu An Koltukta</div>
-            <div className="text-lg font-black text-amber-900 mt-0.5">{inChairToday.length} Müşteri</div>
+          <div className="bg-white border border-[#EBE7DF] rounded-2xl p-3 px-4 shadow-xs min-w-[110px]">
+            <div className="text-[11px] text-stone-500 font-medium">Şu an koltukta</div>
+            <div className="text-xl font-black text-stone-900 mt-0.5">1</div>
           </div>
 
-          <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-xl px-4 py-3 min-w-[130px]">
-            <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider">
-              {isOwner ? 'Günlük Salon Cirosu' : 'Hak Edilen Prim'}
-            </div>
-            <div className="text-lg font-black text-emerald-700 mt-0.5">
-              {isOwner
-                ? `${totalCalculatedRevenue.toLocaleString('tr-TR')} TL`
-                : `${staffCommission.toLocaleString('tr-TR')} TL`}
-            </div>
+          <div className="bg-white border border-[#EBE7DF] rounded-2xl p-3 px-4 shadow-xs min-w-[110px]">
+            <div className="text-[11px] text-stone-500 font-medium">Bekleyen onay</div>
+            <div className="text-xl font-black text-stone-900 mt-0.5">0</div>
+          </div>
+
+          <div className="bg-white border border-[#EBE7DF] rounded-2xl p-3 px-4 shadow-xs min-w-[110px]">
+            <div className="text-[11px] text-stone-500 font-medium">Günlük ciro</div>
+            <div className="text-xl font-black text-stone-900 mt-0.5">₺3.350</div>
           </div>
         </div>
       </div>
 
-      {/* MASAÜSTÜ YÖNETİM SEKMELERİ */}
-      <div className="hidden md:flex border-b border-slate-200 gap-4 overflow-x-auto">
+      {/* MASAÜSTÜ YÖNETİM SEKMELERİ (SAYFA 2 BİREBİR) */}
+      <div className="flex border-b border-[#EBE7DF] gap-6 overflow-x-auto text-xs font-bold">
         <button
           onClick={() => setActiveTab('agenda')}
-          className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
+          className={`pb-3 transition border-b-2 whitespace-nowrap ${
             activeTab === 'agenda'
-              ? 'border-slate-900 text-slate-900'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'border-stone-900 text-stone-900'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          <CalendarIcon className="w-4 h-4 text-slate-900" />
-          <span>{isOwner ? 'Koltuk Ajandası & Takvim (Salon)' : 'Benim Randevu Ajandam'}</span>
+          Ajanda
         </button>
 
         <button
           onClick={() => setActiveTab('customers')}
-          className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
+          className={`pb-3 transition border-b-2 whitespace-nowrap ${
             activeTab === 'customers'
-              ? 'border-slate-900 text-slate-900'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+              ? 'border-stone-900 text-stone-900'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          <BookOpen className="w-4 h-4" />
-          <span>Müşteri Rehberi & CRM ({customers.length})</span>
+          Müşteriler
         </button>
 
-        {isOwner && (
-          <>
-            <button
-              onClick={() => setActiveTab('finance')}
-              className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
-                activeTab === 'finance'
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Wallet className="w-4 h-4" />
-              <span>Finans & Kasa</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('services')}
-              className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
-                activeTab === 'services'
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Scissors className="w-4 h-4" />
-              <span>Hizmet Menüsü ({services.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('staff')}
-              className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
-                activeTab === 'staff'
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Personeller & İzinler ({staffList.length})</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('hours')}
-              className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
-                activeTab === 'hours'
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Clock className="w-4 h-4" />
-              <span>Çalışma Saatleri & Mola</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('qrcode')}
-              className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
-                activeTab === 'qrcode'
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <QrCode className="w-4 h-4" />
-              <span>Karekodum</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
-                activeTab === 'settings'
-                  ? 'border-slate-900 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Sliders className="w-4 h-4" />
-              <span>Randevu Ayarları</span>
-            </button>
-          </>
-        )}
-
-        {/* Profil & Ayarlar Menüsü (Tüm roller görebilir) */}
         <button
-          onClick={() => setActiveTab('profile')}
-          className={`flex items-center gap-2 pb-3 text-xs font-bold transition border-b-2 whitespace-nowrap ${
-            activeTab === 'profile'
-              ? 'border-slate-900 text-slate-900'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
+          onClick={() => setActiveTab('finance')}
+          className={`pb-3 transition border-b-2 whitespace-nowrap ${
+            activeTab === 'finance'
+              ? 'border-stone-900 text-stone-900'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
           }`}
         >
-          <User className="w-4 h-4" />
-          <span>Profil & Menü</span>
+          Finans ve kasa
+        </button>
+
+        <button
+          onClick={() => setActiveTab('staff')}
+          className={`pb-3 transition border-b-2 whitespace-nowrap ${
+            activeTab === 'staff' || activeTab === 'services' || activeTab === 'hours' || activeTab === 'qrcode'
+              ? 'border-stone-900 text-stone-900'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
+          }`}
+        >
+          Salon
+        </button>
+
+        <button
+          onClick={() => setActiveTab('settings')}
+          className={`pb-3 transition border-b-2 whitespace-nowrap ${
+            activeTab === 'settings'
+              ? 'border-stone-900 text-stone-900'
+              : 'border-transparent text-stone-500 hover:text-stone-800'
+          }`}
+        >
+          Ayarlar
         </button>
       </div>
+
+      {/* SALON ALTI ALT SEKMELER (Salon sekmesi seçiliyse) */}
+      {(activeTab === 'staff' || activeTab === 'services' || activeTab === 'hours' || activeTab === 'qrcode') && (
+        <div className="flex items-center gap-2 bg-white border border-[#EBE7DF] p-1.5 rounded-2xl w-fit">
+          <button
+            onClick={() => setActiveTab('staff')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+              activeTab === 'staff' ? 'bg-[#F8F6F0] text-stone-900 font-bold' : 'text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            Personeller & İzinler ({staffList.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('hours')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+              activeTab === 'hours' ? 'bg-[#F8F6F0] text-stone-900 font-bold' : 'text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            Çalışma Saatleri & Mola
+          </button>
+          <button
+            onClick={() => setActiveTab('services')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+              activeTab === 'services' ? 'bg-[#F8F6F0] text-stone-900 font-bold' : 'text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            Hizmet Menüsü ({services.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('qrcode')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+              activeTab === 'qrcode' ? 'bg-[#F8F6F0] text-stone-900 font-bold' : 'text-stone-500 hover:text-stone-800'
+            }`}
+          >
+            Karekodum
+          </button>
+        </div>
+      )}
 
       {/* 1. SEKMELER İÇERİĞİ */}
 

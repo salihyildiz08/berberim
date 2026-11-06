@@ -49,7 +49,6 @@ export const TimelineAgenda: React.FC<TimelineAgendaProps> = ({
   currentStaffId,
   isOwnerView,
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'timeline' | 'pending'>('timeline');
   const [selectedStaffFilter, setSelectedStaffFilter] = useState<string>(currentStaffId || 'all');
   const [selectedApt, setSelectedApt] = useState<Appointment | null>(null);
 
@@ -72,17 +71,19 @@ export const TimelineAgenda: React.FC<TimelineAgendaProps> = ({
     day: 'numeric',
     month: 'long',
     year: 'numeric',
+    weekday: 'long',
   });
 
   // O güne ait randevular
   const dayAppointments = appointments.filter((a) => {
     if (a.appointmentDate !== currentDate || a.status === 'cancelled') return false;
     if (currentStaffId) return a.staffId === currentStaffId;
-    if (selectedStaffFilter !== 'all') return a.staffId === selectedStaffFilter;
     return true;
   });
 
-  const pendingAppointments = appointments.filter((a) => a.status === 'pending');
+  const activeStaffColumns = isOwnerView
+    ? staffList
+    : staffList.filter((s) => s.id === currentStaffId);
 
   const handleModalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,455 +146,305 @@ export const TimelineAgenda: React.FC<TimelineAgendaProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto bg-white rounded-3xl shadow-sm border border-slate-200/80 overflow-hidden">
-      {/* 1. ÜST KOYU GECE MAVİSİ BAŞLIK (REFERANS GÖRSEL 2 STANDARDI) */}
-      <div className="bg-[#151b26] text-white px-5 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-base font-bold tracking-tight">Randevu Paneli</h1>
-            <p className="text-xs text-slate-400 mt-0.5">{formattedDate}</p>
-          </div>
+    <div className="bg-white border border-[#EBE7DF] rounded-3xl p-5 sm:p-6 shadow-xs space-y-6">
+      {/* 1. ÜST KISIM: TARİH GEZGİNİ VE GÖSTERGE LEJANTI (SAYFA 2 BİREBİR) */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#EBE7DF]/70 pb-4">
+        {/* Sol Tarih Gezgini: < 6 Kasım 2026, Cuma > */}
+        <div className="flex items-center gap-2 bg-[#F8F6F0] px-3 py-1.5 rounded-2xl border border-[#EBE7DF]">
+          <button
+            onClick={() => changeDay(-1)}
+            className="p-1 hover:bg-white rounded-lg transition text-stone-600 font-bold"
+            title="Önceki Gün"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
 
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => changeDay(-1)}
-              className="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition"
-              title="Önceki Gün"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+          <span className="text-xs sm:text-sm font-bold text-stone-900 px-2 min-w-[140px] text-center">
+            {formattedDate}
+          </span>
 
-            <div className="relative">
-              <input
-                type="date"
-                value={currentDate}
-                onChange={(e) => onDateChange(e.target.value)}
-                className="opacity-0 absolute inset-0 cursor-pointer w-full h-full"
-              />
-              <button
-                type="button"
-                className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition flex items-center gap-1 text-xs font-semibold"
-              >
-                <CalendarIcon className="w-4 h-4 text-amber-400" />
-              </button>
-            </div>
-
-            <button
-              onClick={() => changeDay(1)}
-              className="p-1.5 text-slate-300 hover:text-white hover:bg-white/10 rounded-lg transition"
-              title="Sonraki Gün"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={() => changeDay(1)}
+            className="p-1 hover:bg-white rounded-lg transition text-stone-600 font-bold"
+            title="Sonraki Gün"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Patron ise: Usta Seçim Filtresi Hapları */}
-        {isOwnerView && !currentStaffId && (
-          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10 overflow-x-auto pb-1">
-            <button
-              onClick={() => setSelectedStaffFilter('all')}
-              className={`px-3 py-1 rounded-full text-xs font-bold transition shrink-0 ${
-                selectedStaffFilter === 'all'
-                  ? 'bg-amber-400 text-slate-950 shadow-xs'
-                  : 'bg-white/10 text-slate-300 hover:bg-white/15'
-              }`}
-            >
-              Tüm Ustalar
-            </button>
-            {staffList.map((st) => (
-              <button
-                key={st.id}
-                onClick={() => setSelectedStaffFilter(st.id)}
-                className={`px-3 py-1 rounded-full text-xs font-semibold transition shrink-0 ${
-                  selectedStaffFilter === st.id
-                    ? 'bg-amber-400 text-slate-950 font-bold shadow-xs'
-                    : 'bg-white/10 text-slate-300 hover:bg-white/15'
-                }`}
-              >
-                {st.name}
-              </button>
+        {/* Sağ Durum Lejantı */}
+        <div className="flex items-center gap-2 text-xs flex-wrap">
+          <span className="text-stone-400 font-medium px-2 py-0.5">Boş</span>
+          <span className="bg-[#E0F2FE] text-[#0369A1] font-semibold px-2.5 py-0.5 rounded-full text-[11px]">
+            Onaylandı
+          </span>
+          <span className="bg-[#FEF3C7] text-[#92400E] font-semibold px-2.5 py-0.5 rounded-full text-[11px]">
+            Koltukta
+          </span>
+          <span className="bg-[#E7F6EC] text-[#1B6E37] font-semibold px-2.5 py-0.5 rounded-full text-[11px]">
+            Tamamlandı
+          </span>
+        </div>
+      </div>
+
+      {/* 2. ÇOK KOLONLU AJANDA TABLOSU (SAYFA 2 BİREBİR) */}
+      <div className="overflow-x-auto pb-4">
+        <div className="min-w-[650px] relative">
+          {/* CANLI ZAMAN ÇİZGİSİ (10:40) */}
+          <div
+            className="absolute left-0 right-0 z-20 pointer-events-none flex items-center"
+            style={{ top: '158px' }} // 10:40 civarı saat konumunda
+          >
+            <span className="bg-[#B86B35] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md shadow-xs ml-1 mr-1">
+              10:40
+            </span>
+            <div className="flex-1 h-[2px] bg-[#B86B35] shadow-xs" />
+          </div>
+
+          {/* Kolon Başlıkları (Usta İsimleri) */}
+          <div className="grid grid-cols-[80px_repeat(3,1fr)] gap-3 border-b border-[#EBE7DF]/80 pb-3 mb-3">
+            <div className="text-xs text-stone-400 font-medium">Saat</div>
+            {activeStaffColumns.slice(0, 3).map((staff) => (
+              <div key={staff.id} className="text-center">
+                <span className="font-bold text-sm text-stone-900">{staff.name}</span>
+                <span className="block text-[11px] text-stone-400 mt-0.5">{staff.title}</span>
+              </div>
             ))}
           </div>
-        )}
-      </div>
 
-      {/* 2. İKİLİ TAB: AJANDA / BEKLEYENLER */}
-      <div className="flex border-b border-slate-200 bg-slate-50/70">
-        <button
-          onClick={() => setActiveSubTab('timeline')}
-          className={`flex-1 py-3 text-xs font-bold transition flex items-center justify-center gap-1.5 border-b-2 ${
-            activeSubTab === 'timeline'
-              ? 'border-slate-900 text-slate-900 bg-white'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <span className="text-sm">≡</span>
-          <span>Ajanda</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('pending')}
-          className={`flex-1 py-3 text-xs font-bold transition flex items-center justify-center gap-1.5 border-b-2 ${
-            activeSubTab === 'pending'
-              ? 'border-slate-900 text-slate-900 bg-white'
-              : 'border-transparent text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <span>🔔</span>
-          <span>Bekleyenler ({pendingAppointments.length})</span>
-        </button>
-      </div>
-
-      {/* 3. İÇERİK: DİKEY ZAMAN ÇİZGİSİ (REFERANS GÖRSEL 2 STANDARDI) */}
-      {activeSubTab === 'timeline' ? (
-        <div className="p-4 sm:p-6 space-y-4">
-          <div className="space-y-3 relative">
-            {HOURS.map((hour) => {
-              const matchingApts = dayAppointments.filter((a) => a.startTime === hour);
-
+          {/* Saat Satırları */}
+          <div className="space-y-2.5">
+            {HOURS.slice(0, 8).map((hour) => {
               return (
-                <div key={hour} className="flex items-start gap-4 group">
-                  {/* Sol Dikey Saat Cetveli */}
-                  <div className="w-14 text-right pt-2 shrink-0">
-                    <span className="text-xs font-bold text-slate-700 font-mono">{hour}</span>
-                    <div className="w-[1px] h-10 bg-slate-200 mx-auto mt-1 group-last:hidden" />
+                <div key={hour} className="grid grid-cols-[80px_repeat(3,1fr)] gap-3 items-center">
+                  {/* Sol Saat */}
+                  <div className="text-xs font-mono font-medium text-stone-500 py-1">
+                    {hour}
                   </div>
 
-                  {/* Sağ Randevu Kartı veya Boş Koltuk */}
-                  <div className="flex-1 space-y-2">
-                    {matchingApts.length > 0 ? (
-                      matchingApts.map((apt) => (
+                  {/* 3 Usta Hücresi */}
+                  {activeStaffColumns.slice(0, 3).map((staff) => {
+                    const apt = dayAppointments.find(
+                      (a) => a.staffId === staff.id && a.startTime === hour
+                    );
+
+                    if (apt) {
+                      const isInChair = apt.status === 'in_chair';
+                      const isCompleted = apt.status === 'completed';
+                      const isConfirmed = apt.status === 'confirmed';
+
+                      return (
                         <div
                           key={apt.id}
                           onClick={() => setSelectedApt(apt)}
-                          className={`border rounded-2xl p-3.5 transition cursor-pointer shadow-xs flex items-center justify-between gap-3 ${
-                            apt.status === 'in_chair'
-                              ? 'bg-amber-500/10 border-amber-400 ring-1 ring-amber-400/40'
-                              : apt.status === 'break'
-                              ? 'bg-slate-100 border-slate-300 text-slate-600 border-dashed'
-                              : apt.status === 'completed'
-                              ? 'bg-white border-slate-200 hover:border-slate-300'
-                              : 'bg-white border-blue-200 hover:border-blue-300'
+                          className={`rounded-2xl p-3 border transition cursor-pointer shadow-xs ${
+                            isInChair
+                              ? 'bg-[#FEF3C7]/40 border-2 border-[#B86B35] ring-2 ring-[#B86B35]/20'
+                              : 'bg-white border-[#EBE7DF] hover:border-stone-400'
                           }`}
                         >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              {apt.status === 'in_chair' && (
-                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                              )}
-                              <h4 className="text-sm font-extrabold text-slate-900 uppercase tracking-tight">
-                                {apt.customerName}
-                              </h4>
-                              {apt.visitCount && apt.visitCount > 1 && (
-                                <span className="text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 font-bold flex items-center gap-0.5">
-                                  <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" /> {apt.visitCount}
-                                </span>
-                              )}
-                            </div>
-
-                            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                              <span className="font-semibold text-slate-700">👤 {apt.staffName}</span>
-                              <span>•</span>
-                              <span>{apt.serviceName}</span>
-                              {apt.price > 0 && <span className="text-slate-900 font-bold">({apt.price} TL)</span>}
-                            </p>
-                          </div>
-
-                          <div className="shrink-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-xs text-stone-900 truncate">
+                              {apt.customerName}
+                            </span>
                             <span
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase transition ${
-                                apt.status === 'in_chair'
-                                  ? 'bg-amber-500 text-slate-950 font-black'
-                                  : apt.status === 'completed'
-                                  ? 'bg-slate-100 text-slate-600 border border-slate-200'
-                                  : apt.status === 'break'
-                                  ? 'bg-slate-200 text-slate-700'
-                                  : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                                isInChair
+                                  ? 'bg-[#FEF3C7] text-[#92400E]'
+                                  : isCompleted
+                                  ? 'bg-[#E7F6EC] text-[#1B6E37]'
+                                  : 'bg-[#E0F2FE] text-[#0369A1]'
                               }`}
                             >
-                              {apt.status === 'in_chair'
-                                ? '✂️ Koltukta'
-                                : apt.status === 'break'
-                                ? 'Mola'
-                                : apt.status === 'completed'
+                              {isInChair
+                                ? 'Koltukta'
+                                : isCompleted
                                 ? 'Tamamlandı'
                                 : 'Onaylandı'}
                             </span>
                           </div>
+
+                          <div className="text-[11px] text-stone-500 mt-1 truncate">
+                            {apt.serviceName} · ₺{apt.price}
+                          </div>
                         </div>
-                      ))
-                    ) : (
-                      /* Boş Saat Kutusu (Referans Görsel 2 Standartında) */
+                      );
+                    }
+
+                    // Boş Koltuk: "+ randevu yaz"
+                    return (
                       <div
+                        key={`${staff.id}-${hour}`}
                         onClick={() => {
+                          setModalStaffId(staff.id);
                           setModalSlotTime(hour);
                           setModalType('appointment');
                         }}
-                        className="border border-slate-200/90 rounded-2xl p-3 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-700 text-center text-xs font-semibold cursor-pointer transition flex items-center justify-center gap-2 group/empty shadow-xs"
+                        className="bg-white border border-dashed border-[#EBE7DF] hover:border-stone-400 rounded-2xl py-3 px-3 text-center text-xs text-stone-400 hover:text-stone-700 cursor-pointer transition flex items-center justify-center gap-1 shadow-xs"
                       >
-                        <span className="text-slate-400 group-hover/empty:text-slate-600">Boş</span>
-                        <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md opacity-0 group-hover/empty:opacity-100 transition">
-                          + Randevu veya Mola Ekle
-                        </span>
+                        <span>+ randevu yaz</span>
                       </div>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
               );
             })}
           </div>
         </div>
-      ) : (
-        /* BEKLEYENLER SEKMESİ */
-        <div className="p-5 space-y-3">
-          <div className="text-xs text-slate-500 font-semibold mb-2">
-            Onay Bekleyen Online Rezervasyonlar ({pendingAppointments.length})
-          </div>
+      </div>
 
-          {pendingAppointments.length > 0 ? (
-            pendingAppointments.map((apt) => (
-              <div
-                key={apt.id}
-                className="bg-white border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs"
-              >
-                <div>
-                  <h4 className="font-bold text-slate-900 text-sm">{apt.customerName}</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {apt.appointmentDate} • {apt.startTime} - {apt.endTime} • {apt.serviceName}
-                  </p>
-                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">👤 Usta: {apt.staffName}</p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => onUpdateStatus(apt.id, 'confirmed')}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition"
-                  >
-                    Onayla
-                  </button>
-                  <button
-                    onClick={() => onUpdateStatus(apt.id, 'cancelled')}
-                    className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 font-bold text-xs transition"
-                  >
-                    Reddet
-                  </button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="py-12 text-center text-slate-400 text-xs">
-              Bekleyen herhangi bir randevu bulunmamaktadır.
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* HIZLI RANDEVU / MOLA MODALI */}
-      {modalSlotTime && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+      {/* RANDEVU DETAY & DURUM DEĞİŞTİRME MODALI */}
+      {selectedApt && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#EBE7DF] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#EBE7DF] pb-3">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">
-                  {modalType === 'break' ? '☕ Koltuğu Molaya Kapat' : 'Hızlı Randevu Kaydı'}
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {currentDate} saat {modalSlotTime}
+                <h3 className="text-base font-bold text-stone-900">{selectedApt.customerName}</h3>
+                <p className="text-xs text-stone-500">
+                  {selectedApt.appointmentDate} · {selectedApt.startTime} - {selectedApt.endTime}
                 </p>
               </div>
-              <button onClick={() => setModalSlotTime(null)} className="text-slate-400 hover:text-slate-700 text-sm p-1">
+              <button
+                onClick={() => setSelectedApt(null)}
+                className="text-stone-400 hover:text-stone-700 font-bold text-lg"
+              >
                 ✕
               </button>
             </div>
 
-            <div className="flex bg-slate-100 p-1 rounded-xl">
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-stone-100">
+                <span className="text-stone-500">Usta:</span>
+                <span className="font-bold text-stone-900">{selectedApt.staffName}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-100">
+                <span className="text-stone-500">Hizmet:</span>
+                <span className="font-bold text-stone-900">{selectedApt.serviceName}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-100">
+                <span className="text-stone-500">Tutar:</span>
+                <span className="font-bold text-stone-900">₺{selectedApt.price}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-stone-100">
+                <span className="text-stone-500">İletişim:</span>
+                <span className="font-mono text-stone-700">{selectedApt.customerPhone}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <div className="text-[11px] font-bold text-stone-500">Durumu Değiştir:</div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateStatus(selectedApt.id, 'in_chair');
+                    setSelectedApt(null);
+                  }}
+                  className="py-2 rounded-xl text-xs font-bold bg-[#FEF3C7] text-[#92400E] border border-amber-300 hover:bg-amber-100 transition"
+                >
+                  Koltukta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateStatus(selectedApt.id, 'completed');
+                    setSelectedApt(null);
+                  }}
+                  className="py-2 rounded-xl text-xs font-bold bg-[#E7F6EC] text-[#1B6E37] border border-emerald-300 hover:bg-emerald-100 transition"
+                >
+                  Tamamlandı
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateStatus(selectedApt.id, 'cancelled');
+                    setSelectedApt(null);
+                  }}
+                  className="py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition"
+                >
+                  İptal Et
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HIZLI RANDEVU EKLEME MODALI */}
+      {modalSlotTime && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#EBE7DF] rounded-3xl p-6 max-w-md w-full space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#EBE7DF] pb-3">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">Yeni Randevu Yaz</h3>
+                <p className="text-xs text-stone-500">
+                  {currentDate} · Saat {modalSlotTime}
+                </p>
+              </div>
               <button
-                type="button"
-                onClick={() => setModalType('appointment')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                  modalType === 'appointment' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
-                }`}
+                onClick={() => setModalSlotTime(null)}
+                className="text-stone-400 hover:text-stone-700 font-bold text-lg"
               >
-                <Scissors className="w-3.5 h-3.5" /> Müşteri Randevusu
-              </button>
-              <button
-                type="button"
-                onClick={() => setModalType('break')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 ${
-                  modalType === 'break' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600'
-                }`}
-              >
-                <Coffee className="w-3.5 h-3.5" /> Mola / Kilit
+                ✕
               </button>
             </div>
 
             <form onSubmit={handleModalSubmit} className="space-y-3.5 text-xs">
-              {modalType === 'appointment' ? (
-                <>
-                  <div>
-                    <label className="block text-slate-700 font-semibold mb-1">Müşteri Ad Soyad *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Örn: Yusuf Kalın"
-                      value={quickCustomerName}
-                      onChange={(e) => setQuickCustomerName(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 text-sm"
-                    />
-                  </div>
+              <div>
+                <label className="block text-stone-700 font-semibold mb-1">Müşteri Adı Soyadı *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Örn: Burak Kaya"
+                  value={quickCustomerName}
+                  onChange={(e) => setQuickCustomerName(e.target.value)}
+                  className="w-full bg-[#F8F6F0] border border-[#EBE7DF] rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-[#B86B35]"
+                />
+              </div>
 
-                  <div>
-                    <label className="block text-slate-700 font-semibold mb-1">Telefon Numarası *</label>
-                    <input
-                      type="tel"
-                      required
-                      placeholder="0532 000 00 00"
-                      value={quickCustomerPhone}
-                      onChange={(e) => setQuickCustomerPhone(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 text-sm"
-                    />
-                  </div>
+              <div>
+                <label className="block text-stone-700 font-semibold mb-1">Telefon Numarası *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="0532 123 45 67"
+                  value={quickCustomerPhone}
+                  onChange={(e) => setQuickCustomerPhone(e.target.value)}
+                  className="w-full bg-[#F8F6F0] border border-[#EBE7DF] rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-[#B86B35]"
+                />
+              </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-slate-700 font-semibold mb-1">Hizmet *</label>
-                      <select
-                        value={quickServiceId}
-                        onChange={(e) => setQuickServiceId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 text-xs"
-                      >
-                        {services.map((srv) => (
-                          <option key={srv.id} value={srv.id}>
-                            {srv.name} ({srv.durationMinutes} Dk)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-700 font-semibold mb-1">Usta / Koltuk</label>
-                      <select
-                        value={modalStaffId}
-                        onChange={(e) => setModalStaffId(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 text-xs"
-                      >
-                        {staffList.map((st) => (
-                          <option key={st.id} value={st.id}>{st.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Mola Sebebi</label>
-                  <input
-                    type="text"
-                    placeholder="Örn: Yemek Molası / Dinlenme"
-                    value={quickNotes}
-                    onChange={(e) => setQuickNotes(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 text-sm"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="block text-stone-700 font-semibold mb-1">Hizmet Seçin *</label>
+                <select
+                  value={quickServiceId}
+                  onChange={(e) => setQuickServiceId(e.target.value)}
+                  className="w-full bg-[#F8F6F0] border border-[#EBE7DF] rounded-xl px-3 py-2 text-stone-900 focus:bg-white focus:outline-none focus:border-[#B86B35]"
+                >
+                  {services.map((srv) => (
+                    <option key={srv.id} value={srv.id}>
+                      {srv.name} ({srv.durationMinutes} dk - ₺{srv.price})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setModalSlotTime(null)}
-                  className="flex-1 py-2.5 rounded-lg bg-slate-100 text-slate-700 font-semibold hover:bg-slate-200 transition"
+                  className="flex-1 py-2.5 rounded-xl bg-stone-100 text-stone-700 font-semibold hover:bg-stone-200 transition"
                 >
-                  İptal
+                  Vazgeç
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold transition shadow-xs"
+                  className="flex-1 py-2.5 rounded-xl bg-[#B86B35] hover:bg-[#A35C2B] text-white font-bold transition shadow-xs"
                 >
-                  {modalType === 'break' ? 'Molayı Kilitle' : 'Kaydet'}
+                  Randevuyu Kaydet
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* SEÇİLİ RANDEVU DETAY MODALI */}
-      {selectedApt && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
-            <div className="flex items-start justify-between border-b border-slate-100 pb-3">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
-                  Randevu Kartı
-                </span>
-                <h3 className="text-base font-extrabold text-slate-900 mt-1.5 uppercase">
-                  {selectedApt.customerName}
-                </h3>
-                <p className="text-xs text-slate-500 font-mono mt-0.5">{selectedApt.customerPhone}</p>
-              </div>
-              <button onClick={() => setSelectedApt(null)} className="text-slate-400 hover:text-slate-700 p-1">
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-2 text-xs bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Hizmet:</span>
-                <span className="font-bold text-slate-900">{selectedApt.serviceName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Koltuk / Usta:</span>
-                <span className="font-bold text-slate-900">{selectedApt.staffName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Saat:</span>
-                <span className="font-bold text-slate-900">{selectedApt.startTime} - {selectedApt.endTime}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Tutar:</span>
-                <span className="font-bold text-slate-900">{selectedApt.price > 0 ? `${selectedApt.price} TL` : 'Fiyatsız'}</span>
-              </div>
-            </div>
-
-            {selectedApt.status !== 'break' && (
-              <div className="space-y-2">
-                <div className="text-[11px] font-semibold text-slate-600">Durumu Değiştir:</div>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => {
-                      onUpdateStatus(selectedApt.id, 'in_chair');
-                      setSelectedApt(null);
-                    }}
-                    className={`py-2 px-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 border ${
-                      selectedApt.status === 'in_chair'
-                        ? 'bg-amber-500 text-slate-950 border-amber-600'
-                        : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border-amber-200'
-                    }`}
-                  >
-                    ✂️ Koltukta
-                  </button>
-                  <button
-                    onClick={() => {
-                      onUpdateStatus(selectedApt.id, 'completed');
-                      setSelectedApt(null);
-                    }}
-                    className="py-2 px-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition flex items-center justify-center gap-1"
-                  >
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Bitti
-                  </button>
-                  <button
-                    onClick={() => {
-                      onUpdateStatus(selectedApt.id, 'cancelled');
-                      setSelectedApt(null);
-                    }}
-                    className="py-2 px-1.5 rounded-lg bg-rose-50 text-rose-800 hover:bg-rose-100 border border-rose-200 text-xs font-bold transition flex items-center justify-center gap-1"
-                  >
-                    <XCircle className="w-3.5 h-3.5 text-rose-600" /> İptal
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
