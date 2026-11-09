@@ -20,6 +20,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Trash2,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface CustomerDirectoryProps {
@@ -33,23 +34,32 @@ interface CustomerDirectoryProps {
   onAddBatchAppointments?: (appointments: Omit<Appointment, 'id' | 'createdAt'>[]) => void;
 }
 
-// Periyodik Randevu Tarihleri Üretici Fonksiyonu
+export interface RecurringDateItem {
+  id: string;
+  dateStr: string;
+  formatted: string;
+  dayOfWeek: number;
+  isOriginalSunday: boolean;
+  shiftedTo?: 'prev' | 'next';
+  originalSundayDateStr?: string;
+}
+
+// Periyodik Randevu Tarihleri Üretici Fonksiyonu (Pazar Günü Otomatik Kaydırmalı)
 function generateRecurringDates(
   type: 'monthly_day' | 'interval_days',
   dayOrInterval: number,
   months: number,
+  sundayShift: 'prev_day' | 'next_day',
   baseDateStr?: string
-): { dateStr: string; formatted: string }[] {
-  const dates: { dateStr: string; formatted: string }[] = [];
+): RecurringDateItem[] {
+  const dates: RecurringDateItem[] = [];
   const start = baseDateStr ? new Date(baseDateStr) : new Date();
 
   if (type === 'monthly_day') {
-    // Her ayın X. günü (Örn: Her ayın 20'si)
     const targetDay = Math.min(31, Math.max(1, dayOrInterval));
     let currentYear = start.getFullYear();
     let currentMonth = start.getMonth();
 
-    // Eğer başlangıç gününden önce ise bu ay, geçmişse bir sonraki aydan başlasın
     if (start.getDate() > targetDay) {
       currentMonth++;
     }
@@ -59,22 +69,70 @@ function generateRecurringDates(
       const lastDayOfMonth = new Date(tempDate.getFullYear(), tempDate.getMonth() + 1, 0).getDate();
       const actualDay = Math.min(targetDay, lastDayOfMonth);
       const d = new Date(tempDate.getFullYear(), tempDate.getMonth(), actualDay);
+
+      const isSunday = d.getDay() === 0;
+      const originalSundayDateStr = isSunday ? d.toISOString().split('T')[0] : undefined;
+      let shiftedTo: 'prev' | 'next' | undefined = undefined;
+
+      if (isSunday) {
+        if (sundayShift === 'prev_day') {
+          d.setDate(d.getDate() - 1); // Cumartesi
+          shiftedTo = 'prev';
+        } else {
+          d.setDate(d.getDate() + 1); // Pazartesi
+          shiftedTo = 'next';
+        }
+      }
+
       const dateStr = d.toISOString().split('T')[0];
       const formatted = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
-      dates.push({ dateStr, formatted });
+      dates.push({
+        id: `rec-${i}`,
+        dateStr,
+        formatted,
+        dayOfWeek: d.getDay(),
+        isOriginalSunday: isSunday,
+        shiftedTo,
+        originalSundayDateStr,
+      });
     }
   } else {
-    // Her X günde bir (Örn: Her 20 günde bir)
     const interval = Math.max(1, dayOrInterval);
-    const totalDays = months * 30; // Seçilen ay kadar sürsün
+    const totalDays = months * 30;
     let curr = new Date(start);
+    let i = 0;
 
     while (dates.length < Math.max(months, Math.floor(totalDays / interval))) {
-      const dateStr = curr.toISOString().split('T')[0];
-      const formatted = curr.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
-      dates.push({ dateStr, formatted });
+      const d = new Date(curr);
+      const isSunday = d.getDay() === 0;
+      const originalSundayDateStr = isSunday ? d.toISOString().split('T')[0] : undefined;
+      let shiftedTo: 'prev' | 'next' | undefined = undefined;
+
+      if (isSunday) {
+        if (sundayShift === 'prev_day') {
+          d.setDate(d.getDate() - 1); // Cumartesi
+          shiftedTo = 'prev';
+        } else {
+          d.setDate(d.getDate() + 1); // Pazartesi
+          shiftedTo = 'next';
+        }
+      }
+
+      const dateStr = d.toISOString().split('T')[0];
+      const formatted = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
+      dates.push({
+        id: `rec-${i}`,
+        dateStr,
+        formatted,
+        dayOfWeek: d.getDay(),
+        isOriginalSunday: isSunday,
+        shiftedTo,
+        originalSundayDateStr,
+      });
+
       curr = new Date(curr.getTime() + interval * 24 * 60 * 60 * 1000);
-      if (dates.length >= 24) break; // Güvenlik sınırı
+      i++;
+      if (dates.length >= 24) break;
     }
   }
 
@@ -109,6 +167,8 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
   const [intervalDays, setIntervalDays] = useState<number>(20); // Her 20 günde bir
   const [aptTime, setAptTime] = useState<string>('16:00'); // Saat 16:00
   const [durationMonths, setDurationMonths] = useState<number>(5); // 5 Aylık Seri
+  const [sundayShift, setSundayShift] = useState<'prev_day' | 'next_day'>('next_day'); // Pazar günleri ne yapılsın: Pazartesi mi Cumartesi mi
+  const [newCustomOverrides, setNewCustomOverrides] = useState<Record<number, { dateStr: string; formatted: string; shiftedTo: 'prev' | 'next' }>>({});
 
   // 2. Mevcut Müşteri İçin Seri Randevu Modalı State'leri
   const [showRecurringModalForExisting, setShowRecurringModalForExisting] = useState(false);
@@ -119,6 +179,8 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
   const [existingIntervalDays, setExistingIntervalDays] = useState<number>(20);
   const [existingAptTime, setExistingAptTime] = useState<string>('16:00');
   const [existingDurationMonths, setExistingDurationMonths] = useState<number>(5);
+  const [existingSundayShift, setExistingSundayShift] = useState<'prev_day' | 'next_day'>('next_day');
+  const [existingCustomOverrides, setExistingCustomOverrides] = useState<Record<number, { dateStr: string; formatted: string; shiftedTo: 'prev' | 'next' }>>({});
 
   // Not düzenleme modu
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -129,6 +191,83 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.phone.includes(searchTerm)
   );
+
+  // Yeni Müşteri İçin Canlı Tarih Hesaplama
+  const rawDatesForNew = generateRecurringDates(
+    recurringType,
+    recurringType === 'monthly_day' ? monthlyDay : intervalDays,
+    durationMonths,
+    sundayShift
+  );
+
+  const previewDatesForNew = rawDatesForNew.map((item, idx) => {
+    if (newCustomOverrides[idx]) {
+      return {
+        ...item,
+        dateStr: newCustomOverrides[idx].dateStr,
+        formatted: newCustomOverrides[idx].formatted,
+        shiftedTo: newCustomOverrides[idx].shiftedTo,
+      };
+    }
+    return item;
+  });
+
+  // Satır bazında Cumartesi / Pazartesi değiştirme
+  const shiftNewRowDate = (idx: number, direction: 'prev' | 'next') => {
+    const item = rawDatesForNew[idx];
+    const sundayDate = item.originalSundayDateStr ? new Date(item.originalSundayDateStr) : new Date(item.dateStr);
+    const target = new Date(sundayDate);
+    if (direction === 'prev') {
+      target.setDate(sundayDate.getDate() - 1); // Cumartesi
+    } else {
+      target.setDate(sundayDate.getDate() + 1); // Pazartesi
+    }
+
+    const dateStr = target.toISOString().split('T')[0];
+    const formatted = target.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
+    setNewCustomOverrides((prev) => ({
+      ...prev,
+      [idx]: { dateStr, formatted, shiftedTo: direction },
+    }));
+  };
+
+  // Mevcut Müşteri İçin Canlı Tarih Hesaplama
+  const rawDatesForExisting = generateRecurringDates(
+    existingRecurringType,
+    existingRecurringType === 'monthly_day' ? existingMonthlyDay : existingIntervalDays,
+    existingDurationMonths,
+    existingSundayShift
+  );
+
+  const previewDatesForExisting = rawDatesForExisting.map((item, idx) => {
+    if (existingCustomOverrides[idx]) {
+      return {
+        ...item,
+        dateStr: existingCustomOverrides[idx].dateStr,
+        formatted: existingCustomOverrides[idx].formatted,
+        shiftedTo: existingCustomOverrides[idx].shiftedTo,
+      };
+    }
+    return item;
+  });
+
+  const shiftExistingRowDate = (idx: number, direction: 'prev' | 'next') => {
+    const item = rawDatesForExisting[idx];
+    const sundayDate = item.originalSundayDateStr ? new Date(item.originalSundayDateStr) : new Date(item.dateStr);
+    const target = new Date(sundayDate);
+    if (direction === 'prev') {
+      target.setDate(sundayDate.getDate() - 1); // Cumartesi
+    } else {
+      target.setDate(sundayDate.getDate() + 1); // Pazartesi
+    }
+
+    const dateStr = target.toISOString().split('T')[0];
+    const formatted = target.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
+    setExistingCustomOverrides((prev) => ({
+      ...prev,
+      [idx]: { dateStr, formatted, shiftedTo: direction },
+    }));
+  };
 
   // Yeni Müşteri Formu Gönderildiğinde
   const handleCreateCustomer = (e: React.FormEvent) => {
@@ -143,7 +282,7 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
       salonId: 'salon-1',
       name,
       phone,
-      totalVisits: isRecurringEnabled ? durationMonths : 1,
+      totalVisits: isRecurringEnabled ? previewDatesForNew.length : 1,
       lastVisitDate: new Date().toISOString().split('T')[0],
       favoriteService: favService,
       favoriteStaff: favStaff,
@@ -153,18 +292,12 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
 
     // Otomatik Periyodik Randevuları Oluştur
     if (isRecurringEnabled && onAddBatchAppointments) {
-      const generatedDates = generateRecurringDates(
-        recurringType,
-        recurringType === 'monthly_day' ? monthlyDay : intervalDays,
-        durationMonths
-      );
-
       const [h, m] = aptTime.split(':').map(Number);
       const totalMin = h * 60 + m + matchedService.durationMinutes;
       const endH = String(Math.floor(totalMin / 60)).padStart(2, '0');
       const endM = String(totalMin % 60).padStart(2, '0');
 
-      const batchAppointments = generatedDates.map((d, idx) => ({
+      const batchAppointments = previewDatesForNew.map((d, idx) => ({
         salonId: 'salon-1',
         customerName: name,
         customerPhone: phone,
@@ -177,7 +310,7 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
         endTime: `${endH}:${endM}`,
         price: matchedService.price,
         status: 'confirmed' as const,
-        notes: `VIP Periyodik Seri (${idx + 1}/${generatedDates.length})${specialNotes ? ` • ${specialNotes}` : ''}`,
+        notes: `VIP Periyodik Seri (${idx + 1}/${previewDatesForNew.length})${d.shiftedTo ? ` • ${d.shiftedTo === 'prev' ? 'Cumartesiye Alındı' : 'Pazartesiye Alındı'}` : ''}`,
         recurringDays: recurringType === 'interval_days' ? intervalDays : 30,
       }));
 
@@ -188,6 +321,7 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
     setPhone('');
     setSpecialNotes('');
     setIsRecurringEnabled(false);
+    setNewCustomOverrides({});
     setShowAddModal(false);
   };
 
@@ -199,18 +333,12 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
     const matchedStaff = staffList.find((s) => s.id === existingCustStaff) || staffList[0];
     const matchedService = services.find((s) => s.id === existingCustService) || services[0];
 
-    const generatedDates = generateRecurringDates(
-      existingRecurringType,
-      existingRecurringType === 'monthly_day' ? existingMonthlyDay : existingIntervalDays,
-      existingDurationMonths
-    );
-
     const [h, m] = existingAptTime.split(':').map(Number);
     const totalMin = h * 60 + m + matchedService.durationMinutes;
     const endH = String(Math.floor(totalMin / 60)).padStart(2, '0');
     const endM = String(totalMin % 60).padStart(2, '0');
 
-    const batchAppointments = generatedDates.map((d, idx) => ({
+    const batchAppointments = previewDatesForExisting.map((d, idx) => ({
       salonId: 'salon-1',
       customerName: selectedCustomer.name,
       customerPhone: selectedCustomer.phone,
@@ -223,11 +351,12 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
       endTime: `${endH}:${endM}`,
       price: matchedService.price,
       status: 'confirmed' as const,
-      notes: `VIP Periyodik Seri (${idx + 1}/${generatedDates.length})`,
+      notes: `VIP Periyodik Seri (${idx + 1}/${previewDatesForExisting.length})${d.shiftedTo ? ` • ${d.shiftedTo === 'prev' ? 'Cumartesiye Alındı' : 'Pazartesiye Alındı'}` : ''}`,
       recurringDays: existingRecurringType === 'interval_days' ? existingIntervalDays : 30,
     }));
 
     onAddBatchAppointments(batchAppointments);
+    setExistingCustomOverrides({});
     setShowRecurringModalForExisting(false);
   };
 
@@ -238,20 +367,6 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
       setSelectedCustomer({ ...selectedCustomer, specialNotes: tempNote });
     }
   };
-
-  // Canlı Önizleme Randevu Listesi (Yeni Müşteri İçin)
-  const previewDatesForNew = generateRecurringDates(
-    recurringType,
-    recurringType === 'monthly_day' ? monthlyDay : intervalDays,
-    durationMonths
-  );
-
-  // Canlı Önizleme Randevu Listesi (Mevcut Müşteri İçin)
-  const previewDatesForExisting = generateRecurringDates(
-    existingRecurringType,
-    existingRecurringType === 'monthly_day' ? existingMonthlyDay : existingIntervalDays,
-    existingDurationMonths
-  );
 
   // Seçili müşterinin yaklaşan randevuları
   const selectedCustomerAppointments = selectedCustomer
@@ -516,6 +631,7 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                     onClick={() => {
                       const matchedStf = staffList.find((s) => s.name === selectedCustomer.favoriteStaff);
                       if (matchedStf) setExistingCustStaff(matchedStf.id);
+                      setExistingCustomOverrides({});
                       setShowRecurringModalForExisting(true);
                     }}
                     className="w-full py-2.5 rounded-xl bg-[#B86B35] hover:bg-[#A35C2B] text-white font-bold transition flex items-center justify-center gap-1.5 shadow-xs"
@@ -641,7 +757,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
-                          onClick={() => setRecurringType('monthly_day')}
+                          onClick={() => {
+                            setRecurringType('monthly_day');
+                            setNewCustomOverrides({});
+                          }}
                           className={`p-2 rounded-lg border text-left font-medium transition ${
                             recurringType === 'monthly_day'
                               ? 'bg-white border-[#B86B35] text-[#B86B35] shadow-2xs font-bold'
@@ -653,7 +772,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => setRecurringType('interval_days')}
+                          onClick={() => {
+                            setRecurringType('interval_days');
+                            setNewCustomOverrides({});
+                          }}
                           className={`p-2 rounded-lg border text-left font-medium transition ${
                             recurringType === 'interval_days'
                               ? 'bg-white border-[#B86B35] text-[#B86B35] shadow-2xs font-bold'
@@ -678,7 +800,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                               min={1}
                               max={31}
                               value={monthlyDay}
-                              onChange={(e) => setMonthlyDay(Number(e.target.value))}
+                              onChange={(e) => {
+                                setMonthlyDay(Number(e.target.value));
+                                setNewCustomOverrides({});
+                              }}
                               className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-center font-bold text-stone-900 focus:outline-none focus:border-[#B86B35]"
                             />
                             <span className="text-stone-500 font-medium">. günü</span>
@@ -694,7 +819,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                               min={5}
                               max={90}
                               value={intervalDays}
-                              onChange={(e) => setIntervalDays(Number(e.target.value))}
+                              onChange={(e) => {
+                                setIntervalDays(Number(e.target.value));
+                                setNewCustomOverrides({});
+                              }}
                               className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-center font-bold text-stone-900 focus:outline-none focus:border-[#B86B35]"
                             />
                             <span className="text-stone-500 font-medium">günde bir</span>
@@ -721,7 +849,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                           <button
                             key={m}
                             type="button"
-                            onClick={() => setDurationMonths(m)}
+                            onClick={() => {
+                              setDurationMonths(m);
+                              setNewCustomOverrides({});
+                            }}
                             className={`py-1.5 px-2 rounded-lg border font-bold text-center transition ${
                               durationMonths === m
                                 ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-2xs'
@@ -734,25 +865,118 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                       </div>
                     </div>
 
-                    {/* CANLI ÖNİZLEME LİSTESİ */}
+                    {/* ⭐ PAZAR GÜNÜ OTOMATİK AYARLAMA KURALI (BERBERİN GÖRECEĞİ YER) */}
+                    <div className="bg-amber-50/90 border border-amber-300 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                          <AlertTriangle className="w-4 h-4 text-amber-600" />
+                          Pazar Günü Çözümü (Dükkan Kapalıysa):
+                        </span>
+                        <span className="text-[10px] text-amber-800 font-semibold bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded">
+                          Otomatik Kaydırma
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-900">
+                        Randevu Pazar gününe denk gelirse sistem otomatik olarak hangi güne kaydırsın?
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSundayShift('prev_day');
+                            setNewCustomOverrides({});
+                          }}
+                          className={`p-2 rounded-lg border text-center transition font-bold flex items-center justify-center gap-1 ${
+                            sundayShift === 'prev_day'
+                              ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                              : 'bg-white border-amber-200 text-amber-900 hover:bg-amber-100/60'
+                          }`}
+                        >
+                          <span>⬅️ 1 Gün Önceye</span>
+                          <span className="text-[10px] font-normal">(Cumartesi)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSundayShift('next_day');
+                            setNewCustomOverrides({});
+                          }}
+                          className={`p-2 rounded-lg border text-center transition font-bold flex items-center justify-center gap-1 ${
+                            sundayShift === 'next_day'
+                              ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                              : 'bg-white border-amber-200 text-amber-900 hover:bg-amber-100/60'
+                          }`}
+                        >
+                          <span>1 Gün Sonraya ➡️</span>
+                          <span className="text-[10px] font-normal">(Pazartesi)</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* CANLI ÖNİZLEME LİSTESİ VE TEK TEK DEĞİŞTİRME */}
                     <div className="bg-white border border-stone-200 rounded-xl p-3 space-y-2">
                       <div className="flex items-center justify-between text-xs font-bold text-stone-900 border-b border-stone-100 pb-1.5">
                         <span>Oluşturulacak Sıralı Randevular ({previewDatesForNew.length}):</span>
                         <span className="text-[#B86B35] font-mono">{aptTime}</span>
                       </div>
-                      <div className="space-y-1 max-h-32 overflow-y-auto pr-1">
-                        {previewDatesForNew.map((d, index) => (
-                          <div
-                            key={d.dateStr}
-                            className="flex items-center justify-between text-[11px] p-1.5 rounded bg-stone-50 border border-stone-100"
-                          >
-                            <span className="font-bold text-stone-800">{index + 1}. Randevu: {d.formatted}</span>
-                            <span className="text-stone-500 font-mono">{aptTime}</span>
-                          </div>
-                        ))}
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {previewDatesForNew.map((d, index) => {
+                          const isSundayOrShifted = d.isOriginalSunday;
+                          return (
+                            <div
+                              key={d.id || index}
+                              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px] p-2 rounded-lg border transition ${
+                                isSundayOrShifted
+                                  ? 'bg-amber-50/80 border-amber-200 text-amber-950'
+                                  : 'bg-stone-50 border-stone-100 text-stone-800'
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold">{index + 1}. Randevu: {d.formatted}</span>
+                                {isSundayOrShifted && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-900 border border-amber-300">
+                                    ⚠️ {d.shiftedTo === 'prev' ? 'Cumartesiye Alındı' : 'Pazartesiye Alındı'}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 self-end sm:self-center">
+                                {isSundayOrShifted && (
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => shiftNewRowDate(index, 'prev')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                                        d.shiftedTo === 'prev'
+                                          ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                                          : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
+                                      }`}
+                                      title="Bu randevuyu Cumartesiye çek"
+                                    >
+                                      Cmt Yap
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => shiftNewRowDate(index, 'next')}
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                                        d.shiftedTo === 'next'
+                                          ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                                          : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
+                                      }`}
+                                      title="Bu randevuyu Pazartesiye çek"
+                                    >
+                                      Pzt Yap
+                                    </button>
+                                  </div>
+                                )}
+                                <span className="text-stone-500 font-mono font-bold">{aptTime}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                       <p className="text-[10px] text-emerald-700 font-semibold">
-                        ✓ Kaydedildiğinde tüm bu randevular ajandaya ve berber takvimine anında işlenecektir.
+                        ✓ Pazar günleri otomatik olarak kaydırılmıştır; berber istediği randevuyu tek tıkla Cumartesi veya Pazartesiye ayarlayabilir.
                       </p>
                     </div>
                   </div>
@@ -830,7 +1054,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setExistingRecurringType('monthly_day')}
+                    onClick={() => {
+                      setExistingRecurringType('monthly_day');
+                      setExistingCustomOverrides({});
+                    }}
                     className={`p-2.5 rounded-lg border text-left font-medium transition ${
                       existingRecurringType === 'monthly_day'
                         ? 'bg-white border-[#B86B35] text-[#B86B35] shadow-2xs font-bold'
@@ -842,7 +1069,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setExistingRecurringType('interval_days')}
+                    onClick={() => {
+                      setExistingRecurringType('interval_days');
+                      setExistingCustomOverrides({});
+                    }}
                     className={`p-2.5 rounded-lg border text-left font-medium transition ${
                       existingRecurringType === 'interval_days'
                         ? 'bg-white border-[#B86B35] text-[#B86B35] shadow-2xs font-bold'
@@ -867,7 +1097,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                         min={1}
                         max={31}
                         value={existingMonthlyDay}
-                        onChange={(e) => setExistingMonthlyDay(Number(e.target.value))}
+                        onChange={(e) => {
+                          setExistingMonthlyDay(Number(e.target.value));
+                          setExistingCustomOverrides({});
+                        }}
                         className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-center font-bold text-stone-900 focus:outline-none focus:border-[#B86B35]"
                       />
                       <span className="text-stone-500 font-medium">. günü</span>
@@ -883,7 +1116,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                         min={5}
                         max={90}
                         value={existingIntervalDays}
-                        onChange={(e) => setExistingIntervalDays(Number(e.target.value))}
+                        onChange={(e) => {
+                          setExistingIntervalDays(Number(e.target.value));
+                          setExistingCustomOverrides({});
+                        }}
                         className="w-16 bg-white border border-stone-300 rounded-lg px-2 py-1.5 text-center font-bold text-stone-900 focus:outline-none focus:border-[#B86B35]"
                       />
                       <span className="text-stone-500 font-medium">günde bir</span>
@@ -910,7 +1146,10 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                     <button
                       key={m}
                       type="button"
-                      onClick={() => setExistingDurationMonths(m)}
+                      onClick={() => {
+                        setExistingDurationMonths(m);
+                        setExistingCustomOverrides({});
+                      }}
                       className={`py-1.5 px-2 rounded-lg border font-bold text-center transition ${
                         existingDurationMonths === m
                           ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-2xs'
@@ -923,22 +1162,112 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                 </div>
               </div>
 
+              {/* ⭐ PAZAR GÜNÜ AYARI */}
+              <div className="bg-amber-50/90 border border-amber-300 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600" />
+                    Pazar Günü Çözümü (Dükkan Kapalıysa):
+                  </span>
+                  <span className="text-[10px] text-amber-800 font-semibold bg-amber-100/90 border border-amber-200 px-2 py-0.5 rounded">
+                    Otomatik Kaydırma
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExistingSundayShift('prev_day');
+                      setExistingCustomOverrides({});
+                    }}
+                    className={`p-2 rounded-lg border text-center transition font-bold flex items-center justify-center gap-1 ${
+                      existingSundayShift === 'prev_day'
+                        ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                        : 'bg-white border-amber-200 text-amber-900 hover:bg-amber-100/60'
+                    }`}
+                  >
+                    <span>⬅️ 1 Gün Önceye</span>
+                    <span className="text-[10px] font-normal">(Cumartesi)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExistingSundayShift('next_day');
+                      setExistingCustomOverrides({});
+                    }}
+                    className={`p-2 rounded-lg border text-center transition font-bold flex items-center justify-center gap-1 ${
+                      existingSundayShift === 'next_day'
+                        ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                        : 'bg-white border-amber-200 text-amber-900 hover:bg-amber-100/60'
+                    }`}
+                  >
+                    <span>1 Gün Sonraya ➡️</span>
+                    <span className="text-[10px] font-normal">(Pazartesi)</span>
+                  </button>
+                </div>
+              </div>
+
               {/* CANLI ÖNİZLEME LİSTESİ */}
               <div className="bg-[#FAF3EE] border border-[#B86B35]/30 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-stone-900 border-b border-[#B86B35]/20 pb-1.5">
                   <span>Oluşturulacak Sıralı Randevular ({previewDatesForExisting.length}):</span>
                   <span className="text-[#B86B35] font-mono">{existingAptTime}</span>
                 </div>
-                <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-                  {previewDatesForExisting.map((d, index) => (
-                    <div
-                      key={d.dateStr}
-                      className="flex items-center justify-between text-[11px] p-1.5 rounded bg-white border border-stone-200"
-                    >
-                      <span className="font-bold text-stone-800">{index + 1}. Randevu: {d.formatted}</span>
-                      <span className="text-stone-500 font-mono">{existingAptTime}</span>
-                    </div>
-                  ))}
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {previewDatesForExisting.map((d, index) => {
+                    const isSundayOrShifted = d.isOriginalSunday;
+                    return (
+                      <div
+                        key={d.id || index}
+                        className={`flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-[11px] p-2 rounded-lg border transition ${
+                          isSundayOrShifted
+                            ? 'bg-amber-50/90 border-amber-200 text-amber-950'
+                            : 'bg-white border-stone-200 text-stone-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold">{index + 1}. Randevu: {d.formatted}</span>
+                          {isSundayOrShifted && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-900 border border-amber-300">
+                              ⚠️ {d.shiftedTo === 'prev' ? 'Cumartesiye Alındı' : 'Pazartesiye Alındı'}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-center">
+                          {isSundayOrShifted && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => shiftExistingRowDate(index, 'prev')}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                                  d.shiftedTo === 'prev'
+                                    ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                                    : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
+                                }`}
+                                title="Bu randevuyu Cumartesiye çek"
+                              >
+                                Cmt Yap
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => shiftExistingRowDate(index, 'next')}
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold border transition ${
+                                  d.shiftedTo === 'next'
+                                    ? 'bg-amber-700 text-white border-amber-700 shadow-2xs'
+                                    : 'bg-white text-amber-900 border-amber-300 hover:bg-amber-100'
+                                }`}
+                                title="Bu randevuyu Pazartesiye çek"
+                              >
+                                Pzt Yap
+                              </button>
+                            </div>
+                          )}
+                          <span className="text-stone-500 font-mono font-bold">{existingAptTime}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 

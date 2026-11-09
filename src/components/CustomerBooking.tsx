@@ -24,14 +24,15 @@ import {
   UserCheck,
 } from 'lucide-react';
 
-// Periyodik Randevu Tarihleri Üretici Fonksiyonu
+// Periyodik Randevu Tarihleri Üretici Fonksiyonu (Pazar Günü Otomatik Kaydırmalı)
 function generateRecurringDates(
   type: 'monthly_day' | 'interval_days',
   dayOrInterval: number,
   months: number,
+  sundayShift: 'prev_day' | 'next_day' = 'next_day',
   baseDateStr?: string
-): { dateStr: string; formatted: string }[] {
-  const dates: { dateStr: string; formatted: string }[] = [];
+): { dateStr: string; formatted: string; isSunday: boolean }[] {
+  const dates: { dateStr: string; formatted: string; isSunday: boolean }[] = [];
   const start = baseDateStr ? new Date(baseDateStr) : new Date();
 
   if (type === 'monthly_day') {
@@ -48,9 +49,19 @@ function generateRecurringDates(
       const lastDayOfMonth = new Date(tempDate.getFullYear(), tempDate.getMonth() + 1, 0).getDate();
       const actualDay = Math.min(targetDay, lastDayOfMonth);
       const d = new Date(tempDate.getFullYear(), tempDate.getMonth(), actualDay);
+
+      const isSunday = d.getDay() === 0;
+      if (isSunday) {
+        if (sundayShift === 'prev_day') {
+          d.setDate(d.getDate() - 1); // Cumartesi
+        } else {
+          d.setDate(d.getDate() + 1); // Pazartesi
+        }
+      }
+
       const dateStr = d.toISOString().split('T')[0];
       const formatted = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
-      dates.push({ dateStr, formatted });
+      dates.push({ dateStr, formatted, isSunday });
     }
   } else {
     const interval = Math.max(1, dayOrInterval);
@@ -58,9 +69,19 @@ function generateRecurringDates(
     let curr = new Date(start);
 
     while (dates.length < Math.max(months, Math.floor(totalDays / interval))) {
-      const dateStr = curr.toISOString().split('T')[0];
-      const formatted = curr.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
-      dates.push({ dateStr, formatted });
+      const d = new Date(curr);
+      const isSunday = d.getDay() === 0;
+      if (isSunday) {
+        if (sundayShift === 'prev_day') {
+          d.setDate(d.getDate() - 1); // Cumartesi
+        } else {
+          d.setDate(d.getDate() + 1); // Pazartesi
+        }
+      }
+
+      const dateStr = d.toISOString().split('T')[0];
+      const formatted = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
+      dates.push({ dateStr, formatted, isSunday });
       curr = new Date(curr.getTime() + interval * 24 * 60 * 60 * 1000);
       if (dates.length >= 24) break;
     }
@@ -139,6 +160,7 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
   const [recurringType, setRecurringType] = useState<'monthly_day' | 'interval_days'>('monthly_day');
   const [recurringDays, setRecurringDays] = useState<number>(20); // Varsayılan 20 gün
   const [recurringMonths, setRecurringMonths] = useState<number>(5); // 5 Aylık Seri (Örn: Her ayın 20'si)
+  const [sundayShift, setSundayShift] = useState<'prev_day' | 'next_day'>('next_day'); // Pazar günü Cumartesi mi Pazartesi mi
 
   const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
   const [bookingSuccessMsg, setBookingSuccessMsg] = useState<string>('');
@@ -213,6 +235,7 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
         recurringType,
         recurringType === 'monthly_day' ? selectedDayOfMonth : recurringDays,
         recurringMonths,
+        sundayShift,
         selectedDate
       );
 
@@ -635,6 +658,35 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
                           {m} Aylık {m === 5 && '⭐'}
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* PAZAR GÜNÜ AYARI */}
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">Pazar Günü Çözümü (Dükkan Kapalıysa):</label>
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setSundayShift('prev_day')}
+                        className={`p-1.5 rounded-lg border text-center transition font-bold ${
+                          sundayShift === 'prev_day'
+                            ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-2xs'
+                            : 'bg-white border-stone-200 text-stone-700'
+                        }`}
+                      >
+                        ⬅️ Cumartesiye Al
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSundayShift('next_day')}
+                        className={`p-1.5 rounded-lg border text-center transition font-bold ${
+                          sundayShift === 'next_day'
+                            ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-2xs'
+                            : 'bg-white border-stone-200 text-stone-700'
+                        }`}
+                      >
+                        Pazartesiye Al ➡️
+                      </button>
                     </div>
                   </div>
 
