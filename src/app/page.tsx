@@ -339,6 +339,17 @@ export default function Home() {
     addNotification('Not Kaydedildi', 'Müşteri kesim notu güncellendi.');
   };
 
+  const handleUpdateCustomerStaff = (customerId: string, staffName: string, staffId?: string) => {
+    setCustomers((prev) =>
+      prev.map((c) =>
+        c.id === customerId
+          ? { ...c, favoriteStaff: staffName, assignedStaffId: staffId || c.assignedStaffId }
+          : c
+      )
+    );
+    addNotification('Personel Atandı', `Müşteriye ${staffName} ustası sabitlendi.`);
+  };
+
   const handleUpdateSalonSettings = (settings: Partial<Salon>) => {
     setActiveSalon((prev) => ({ ...prev, ...settings }));
     setSalons((prev) => prev.map((s) => (s.id === activeSalon.id ? { ...s, ...settings } : s)));
@@ -581,6 +592,7 @@ export default function Home() {
             staffList={staffList}
             services={services}
             appointments={appointments}
+            customers={customers}
             workingHours={workingHours}
             onBookAppointment={handleBookAppointment}
             onCancelAppointment={handleCancelAppointment}
@@ -608,6 +620,7 @@ export default function Home() {
             onAddQuickAppointment={handleAddQuickAppointment}
             onAddCustomer={handleAddCustomer}
             onUpdateCustomerNote={handleUpdateCustomerNote}
+            onUpdateCustomerStaff={handleUpdateCustomerStaff}
             onLogout={handleLogout}
           />
         )}

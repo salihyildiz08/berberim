@@ -53,6 +53,7 @@ interface BarberDashboardProps {
   onAddQuickAppointment: (apt: Omit<Appointment, 'id' | 'createdAt'>) => void;
   onAddCustomer: (newCustomer: Omit<CustomerProfile, 'id' | 'createdAt'>) => void;
   onUpdateCustomerNote: (customerId: string, note: string) => void;
+  onUpdateCustomerStaff?: (customerId: string, staffName: string, staffId?: string) => void;
   onLogout?: () => void;
 }
 
@@ -75,6 +76,7 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
   onAddQuickAppointment,
   onAddCustomer,
   onUpdateCustomerNote,
+  onUpdateCustomerStaff,
   onLogout,
 }) => {
   const isOwner = currentUser.role === 'barber_owner' || currentUser.role === 'admin';
@@ -411,6 +413,7 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
           services={services}
           onAddCustomer={onAddCustomer}
           onUpdateCustomerNote={onUpdateCustomerNote}
+          onUpdateCustomerStaff={onUpdateCustomerStaff}
         />
       )}
 

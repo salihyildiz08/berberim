@@ -24,6 +24,7 @@ interface CustomerDirectoryProps {
   services: Service[];
   onAddCustomer: (newCustomer: Omit<CustomerProfile, 'id' | 'createdAt'>) => void;
   onUpdateCustomerNote: (customerId: string, note: string) => void;
+  onUpdateCustomerStaff?: (customerId: string, staffName: string, staffId?: string) => void;
 }
 
 export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
@@ -32,6 +33,7 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
   services,
   onAddCustomer,
   onUpdateCustomerNote,
+  onUpdateCustomerStaff,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
@@ -58,6 +60,8 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
     e.preventDefault();
     if (!name || !phone) return;
 
+    const matchedStaff = staffList.find((s) => s.name === favStaff);
+
     onAddCustomer({
       salonId: 'salon-1',
       name,
@@ -66,6 +70,7 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
       lastVisitDate: new Date().toISOString().split('T')[0],
       favoriteService: favService,
       favoriteStaff: favStaff,
+      assignedStaffId: matchedStaff?.id,
       specialNotes,
     });
 
@@ -205,12 +210,40 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-2 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Tercih Ettiği Usta:</span>
-                    <span className="font-bold text-slate-900">{selectedCustomer.favoriteStaff || 'Fark etmez'}</span>
+                <div className="space-y-2.5 bg-slate-50 p-3.5 rounded-xl border border-slate-100">
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-medium">Atanan Usta / Personel:</span>
+                      <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-1.5 py-0.5 rounded border border-amber-200">
+                        {selectedCustomer.favoriteStaff ? 'Özel Atanmış' : 'Serbest'}
+                      </span>
+                    </div>
+                    <select
+                      value={selectedCustomer.favoriteStaff || ''}
+                      onChange={(e) => {
+                        const newStaffName = e.target.value;
+                        const matched = staffList.find((s) => s.name === newStaffName);
+                        if (onUpdateCustomerStaff) {
+                          onUpdateCustomerStaff(selectedCustomer.id, newStaffName, matched?.id);
+                        }
+                        setSelectedCustomer({
+                          ...selectedCustomer,
+                          favoriteStaff: newStaffName,
+                          assignedStaffId: matched?.id,
+                        });
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-900 focus:outline-none focus:border-slate-900 shadow-2xs"
+                    >
+                      <option value="">-- Personel Seçimi (Fark Etmez) --</option>
+                      {staffList.map((st) => (
+                        <option key={st.id} value={st.name}>
+                          ✂️ {st.name} ({st.title})
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="flex justify-between">
+
+                  <div className="flex justify-between pt-1 border-t border-slate-200/60">
                     <span className="text-slate-500">Sık Aldığı Hizmet:</span>
                     <span className="font-bold text-slate-900">{selectedCustomer.favoriteService || 'Klasik Kesim'}</span>
                   </div>
@@ -319,14 +352,15 @@ export const CustomerDirectory: React.FC<CustomerDirectoryProps> = ({
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Tercih Ettiği Usta</label>
+                  <label className="block text-slate-700 font-semibold mb-1">Atanan Personel / Usta</label>
                   <select
                     value={favStaff}
                     onChange={(e) => setFavStaff(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 text-xs"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-900 focus:bg-white focus:outline-none focus:border-slate-900 text-xs font-semibold"
                   >
+                    <option value="">Fark Etmez / Serbest</option>
                     {staffList.map((st) => (
-                      <option key={st.id} value={st.name}>{st.name}</option>
+                      <option key={st.id} value={st.name}>✂️ {st.name} ({st.title})</option>
                     ))}
                   </select>
                 </div>

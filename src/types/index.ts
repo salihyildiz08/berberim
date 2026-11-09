@@ -95,7 +95,8 @@ export interface CustomerProfile {
   totalVisits: number;
   lastVisitDate: string;
   favoriteService?: string;
-  favoriteStaff?: string;
+  favoriteStaff?: string; // Atanan Personel Adı
+  assignedStaffId?: string; // Atanan Personel ID'si
   specialNotes?: string;
   recurringDays?: number;  // Müşterinin periyodik döngü tercihi
   createdAt: string;
