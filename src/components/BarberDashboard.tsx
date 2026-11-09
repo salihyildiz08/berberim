@@ -54,6 +54,7 @@ interface BarberDashboardProps {
   onAddCustomer: (newCustomer: Omit<CustomerProfile, 'id' | 'createdAt'>) => void;
   onUpdateCustomerNote: (customerId: string, note: string) => void;
   onUpdateCustomerStaff?: (customerId: string, staffName: string, staffId?: string) => void;
+  onAddBatchAppointments?: (appointments: Omit<Appointment, 'id' | 'createdAt'>[]) => void;
   onLogout?: () => void;
 }
 
@@ -77,6 +78,7 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
   onAddCustomer,
   onUpdateCustomerNote,
   onUpdateCustomerStaff,
+  onAddBatchAppointments,
   onLogout,
 }) => {
   const isOwner = currentUser.role === 'barber_owner' || currentUser.role === 'admin';
@@ -411,9 +413,11 @@ export const BarberDashboard: React.FC<BarberDashboardProps> = ({
           customers={customers}
           staffList={staffList}
           services={services}
+          appointments={appointments}
           onAddCustomer={onAddCustomer}
           onUpdateCustomerNote={onUpdateCustomerNote}
           onUpdateCustomerStaff={onUpdateCustomerStaff}
+          onAddBatchAppointments={onAddBatchAppointments}
         />
       )}
 

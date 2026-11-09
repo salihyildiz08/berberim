@@ -322,6 +322,33 @@ export default function Home() {
     }
   };
 
+  const handleAddBatchAppointments = (newApts: Omit<Appointment, 'id' | 'createdAt'>[]) => {
+    const created: Appointment[] = newApts.map((a, i) => ({
+      ...a,
+      id: `apt-batch-${Date.now()}-${i}`,
+      createdAt: new Date().toISOString(),
+    }));
+
+    setAppointments((prev) => [...created, ...prev]);
+
+    // Müşterinin ziyaret sayısını ve son randevusunu güncelle
+    if (newApts.length > 0) {
+      const firstApt = newApts[0];
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.phone.replace(/\s+/g, '') === firstApt.customerPhone.replace(/\s+/g, '')
+            ? { ...c, totalVisits: c.totalVisits + newApts.length, lastVisitDate: firstApt.appointmentDate }
+            : c
+        )
+      );
+    }
+
+    addNotification(
+      '📅 Periyodik Seri Oluşturuldu',
+      `${newApts[0]?.customerName} için toplam ${newApts.length} adet sıralı randevu takvime işlendi.`
+    );
+  };
+
   const handleAddCustomer = (newCustomerData: Omit<CustomerProfile, 'id' | 'createdAt'>) => {
     const created: CustomerProfile = {
       ...newCustomerData,
@@ -595,6 +622,7 @@ export default function Home() {
             customers={customers}
             workingHours={workingHours}
             onBookAppointment={handleBookAppointment}
+            onAddBatchAppointments={handleAddBatchAppointments}
             onCancelAppointment={handleCancelAppointment}
             onLogout={handleLogout}
           />
@@ -621,6 +649,7 @@ export default function Home() {
             onAddCustomer={handleAddCustomer}
             onUpdateCustomerNote={handleUpdateCustomerNote}
             onUpdateCustomerStaff={handleUpdateCustomerStaff}
+            onAddBatchAppointments={handleAddBatchAppointments}
             onLogout={handleLogout}
           />
         )}

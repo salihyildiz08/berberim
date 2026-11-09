@@ -24,6 +24,51 @@ import {
   UserCheck,
 } from 'lucide-react';
 
+// Periyodik Randevu Tarihleri Üretici Fonksiyonu
+function generateRecurringDates(
+  type: 'monthly_day' | 'interval_days',
+  dayOrInterval: number,
+  months: number,
+  baseDateStr?: string
+): { dateStr: string; formatted: string }[] {
+  const dates: { dateStr: string; formatted: string }[] = [];
+  const start = baseDateStr ? new Date(baseDateStr) : new Date();
+
+  if (type === 'monthly_day') {
+    const targetDay = Math.min(31, Math.max(1, dayOrInterval));
+    let currentYear = start.getFullYear();
+    let currentMonth = start.getMonth();
+
+    if (start.getDate() > targetDay) {
+      currentMonth++;
+    }
+
+    for (let i = 0; i < months; i++) {
+      const tempDate = new Date(currentYear, currentMonth + i, 1);
+      const lastDayOfMonth = new Date(tempDate.getFullYear(), tempDate.getMonth() + 1, 0).getDate();
+      const actualDay = Math.min(targetDay, lastDayOfMonth);
+      const d = new Date(tempDate.getFullYear(), tempDate.getMonth(), actualDay);
+      const dateStr = d.toISOString().split('T')[0];
+      const formatted = d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
+      dates.push({ dateStr, formatted });
+    }
+  } else {
+    const interval = Math.max(1, dayOrInterval);
+    const totalDays = months * 30;
+    let curr = new Date(start);
+
+    while (dates.length < Math.max(months, Math.floor(totalDays / interval))) {
+      const dateStr = curr.toISOString().split('T')[0];
+      const formatted = curr.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'short' });
+      dates.push({ dateStr, formatted });
+      curr = new Date(curr.getTime() + interval * 24 * 60 * 60 * 1000);
+      if (dates.length >= 24) break;
+    }
+  }
+
+  return dates;
+}
+
 interface CustomerBookingProps {
   currentUser: AuthUser;
   salon: Salon;
@@ -33,6 +78,7 @@ interface CustomerBookingProps {
   customers?: CustomerProfile[];
   workingHours?: WorkingHours[];
   onBookAppointment: (newApt: Omit<Appointment, 'id' | 'createdAt'>) => void;
+  onAddBatchAppointments?: (appointments: Omit<Appointment, 'id' | 'createdAt'>[]) => void;
   onCancelAppointment: (aptId: string) => void;
   onLogout?: () => void;
 }
@@ -46,6 +92,7 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
   customers = [],
   workingHours = initialWorkingHours,
   onBookAppointment,
+  onAddBatchAppointments,
   onCancelAppointment,
   onLogout,
 }) => {
@@ -87,12 +134,14 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
   // Not
   const [notes, setNotes] = useState<string>('');
 
-  // 🔄 OTOMATİK PERİYODİK TIRAŞ DÖNGÜSÜ (Örn: Her 20 Günde 1 Tıraş)
-  const [isRecurringEnabled, setIsRecurringEnabled] = useState<boolean>(true);
+  // 🔄 OTOMATİK PERİYODİK TIRAŞ DÖNGÜSÜ
+  const [isRecurringEnabled, setIsRecurringEnabled] = useState<boolean>(false);
+  const [recurringType, setRecurringType] = useState<'monthly_day' | 'interval_days'>('monthly_day');
   const [recurringDays, setRecurringDays] = useState<number>(20); // Varsayılan 20 gün
+  const [recurringMonths, setRecurringMonths] = useState<number>(5); // 5 Aylık Seri (Örn: Her ayın 20'si)
 
   const [bookingSuccess, setBookingSuccess] = useState<boolean>(false);
-  const [nextAutoDateStr, setNextAutoDateStr] = useState<string>('');
+  const [bookingSuccessMsg, setBookingSuccessMsg] = useState<string>('');
 
   const selectedService = services.find((s) => s.id === selectedServiceId) || services[0];
   const selectedStaff = staffList.find((s) => s.id === selectedStaffId) || staffList[0];
@@ -157,35 +206,64 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
     const endH = String(Math.floor(totalMin / 60)).padStart(2, '0');
     const endM = String(totalMin % 60).padStart(2, '0');
 
-    // Otomatik sonraki randevu tarihi hesaplama
-    if (isRecurringEnabled) {
-      const nextDate = new Date(selectedDate);
-      nextDate.setDate(nextDate.getDate() + recurringDays);
-      setNextAutoDateStr(nextDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }));
-    }
+    // Eğer kullanıcı periyodik randevu serisi seçtiyse ve 1'den fazla ay istendiyse
+    if (isRecurringEnabled && recurringMonths > 1 && onAddBatchAppointments) {
+      const selectedDayOfMonth = new Date(selectedDate).getDate();
+      const generatedDates = generateRecurringDates(
+        recurringType,
+        recurringType === 'monthly_day' ? selectedDayOfMonth : recurringDays,
+        recurringMonths,
+        selectedDate
+      );
 
-    onBookAppointment({
-      salonId: salon.id,
-      staffId: selectedStaff.id,
-      staffName: selectedStaff.name,
-      serviceId: selectedService.id,
-      serviceName: selectedService.name,
-      customerName: currentUser.name,
-      customerPhone: currentUser.phone || '0544 222 33 44',
-      appointmentDate: selectedDate,
-      startTime: selectedTime,
-      endTime: `${endH}:${endM}`,
-      price: selectedService.price,
-      status: salon.autoConfirm ? 'confirmed' : 'pending',
-      notes,
-      recurringDays: isRecurringEnabled ? recurringDays : undefined,
-    });
+      const batch = generatedDates.map((d, idx) => ({
+        salonId: salon.id,
+        staffId: selectedStaff.id,
+        staffName: selectedStaff.name,
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        customerName: currentUser.name,
+        customerPhone: currentUser.phone || '0544 222 33 44',
+        appointmentDate: d.dateStr,
+        startTime: selectedTime,
+        endTime: `${endH}:${endM}`,
+        price: selectedService.price,
+        status: salon.autoConfirm ? ('confirmed' as const) : ('pending' as const),
+        notes: `VIP Periyodik Randevu Serisi (${idx + 1}/${generatedDates.length})${notes ? ` • ${notes}` : ''}`,
+        recurringDays: recurringType === 'interval_days' ? recurringDays : 30,
+      }));
+
+      onAddBatchAppointments(batch);
+      setBookingSuccessMsg(
+        `Sayın ${currentUser.name}, toplam ${batch.length} randevunuz (${recurringMonths} aylık sıralı seri halinde) başarıyla oluşturuldu ve berber ajandasına işlendi!`
+      );
+    } else {
+      onBookAppointment({
+        salonId: salon.id,
+        staffId: selectedStaff.id,
+        staffName: selectedStaff.name,
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        customerName: currentUser.name,
+        customerPhone: currentUser.phone || '0544 222 33 44',
+        appointmentDate: selectedDate,
+        startTime: selectedTime,
+        endTime: `${endH}:${endM}`,
+        price: selectedService.price,
+        status: salon.autoConfirm ? 'confirmed' : 'pending',
+        notes,
+        recurringDays: isRecurringEnabled ? recurringDays : undefined,
+      });
+      setBookingSuccessMsg(
+        `Sayın ${currentUser.name}, randevunuz sisteme işlendi. Randevu saatiniz yaklaşınca bildirim gelecektir.`
+      );
+    }
 
     setBookingSuccess(true);
     setTimeout(() => {
       setBookingSuccess(false);
       setSelectedTime('');
-    }, 5000);
+    }, 6000);
   };
 
   return (
@@ -229,8 +307,8 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
             <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
             <h4 className="font-bold text-sm">Randevunuz Başarıyla Alındı!</h4>
           </div>
-          <p className="text-xs text-emerald-800 pl-7">
-            Sayın <strong>{currentUser.name}</strong>, randevunuz sisteme işlendi. Randevu saatiniz yaklaşınca bildirim gelecektir.
+          <p className="text-xs text-emerald-800 pl-7 leading-relaxed">
+            {bookingSuccessMsg || `Sayın ${currentUser.name}, randevunuz sisteme işlendi. Randevu saatiniz yaklaşınca bildirim gelecektir.`}
           </p>
         </div>
       )}
@@ -476,29 +554,100 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
             </div>
 
             {/* 🔄 AKILLI PERİYODİK TIRAŞ DÖNGÜSÜ */}
-            <div className="bg-[#FAF3EE]/60 border border-[#B86B35]/20 rounded-xl p-3.5 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2.5">
-                <Repeat className="w-4 h-4 text-[#B86B35] shrink-0" />
-                <div>
-                  <div className="font-bold text-stone-900">Otomatik Tıraş Döngüsü</div>
-                  <div className="text-[11px] text-stone-500">
-                    Her {recurringDays} günde bir aynı saatte randevunuz otomatik rezerve edilsin.
+            <div className="bg-[#FAF3EE] border border-[#B86B35]/30 rounded-xl p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-[#B86B35] text-white flex items-center justify-center font-bold">
+                    <Repeat className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-stone-900 text-xs">Otomatik Sıralı Randevu Serisi Oluştur</div>
+                    <div className="text-[11px] text-stone-500">
+                      Örn: Her ayın 20&apos;sinde veya 20 günde bir 5 ay boyunca otomatik oluşsun
+                    </div>
                   </div>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsRecurringEnabled(!isRecurringEnabled)}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                  isRecurringEnabled ? 'bg-[#B86B35]' : 'bg-stone-300'
-                }`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    isRecurringEnabled ? 'translate-x-5' : 'translate-x-0'
+                <button
+                  type="button"
+                  onClick={() => setIsRecurringEnabled(!isRecurringEnabled)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
+                    isRecurringEnabled ? 'bg-[#B86B35]' : 'bg-stone-300'
                   }`}
-                />
-              </button>
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      isRecurringEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {isRecurringEnabled && (
+                <div className="pt-2 border-t border-[#B86B35]/20 space-y-2.5 text-xs animate-in fade-in">
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">Döngü Modeli:</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRecurringType('monthly_day')}
+                        className={`p-2 rounded-lg border text-left font-medium transition ${
+                          recurringType === 'monthly_day'
+                            ? 'bg-white border-[#B86B35] text-[#B86B35] shadow-2xs font-bold'
+                            : 'bg-stone-50 border-stone-200 text-stone-700'
+                        }`}
+                      >
+                        🗓️ Her Ayın Sabit Günü
+                        <span className="block text-[10px] text-stone-500 font-normal">
+                          Her ayın {new Date(selectedDate).getDate()}&apos;si saat {selectedTime || '--:--'}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRecurringType('interval_days')}
+                        className={`p-2 rounded-lg border text-left font-medium transition ${
+                          recurringType === 'interval_days'
+                            ? 'bg-white border-[#B86B35] text-[#B86B35] shadow-2xs font-bold'
+                            : 'bg-stone-50 border-stone-200 text-stone-700'
+                        }`}
+                      >
+                        ⏱️ Periyodik Gün Aralığı
+                        <span className="block text-[10px] text-stone-500 font-normal">
+                          Her 20 günde bir saat {selectedTime || '--:--'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-stone-700 font-semibold mb-1">Kaç Aylık Seri Oluşturulsun?</label>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[1, 3, 5, 6].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setRecurringMonths(m)}
+                          className={`py-1.5 px-2 rounded-lg border font-bold text-center transition ${
+                            recurringMonths === m
+                              ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-2xs'
+                              : 'bg-white border-stone-200 text-stone-700 hover:bg-stone-50'
+                          }`}
+                        >
+                          {m} Aylık {m === 5 && '⭐'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {recurringMonths > 1 && (
+                    <div className="p-2.5 rounded-lg bg-white border border-stone-200 text-[11px] text-stone-700 flex items-center justify-between">
+                      <span>⚡ Randevu onaylandığında:</span>
+                      <strong className="text-[#B86B35]">
+                        {recurringMonths} adet sıralı randevu takvime işlenecektir
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* OPSİYONEL BERBERE NOT */}
