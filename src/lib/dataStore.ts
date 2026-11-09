@@ -101,6 +101,7 @@ export const initialAppointments: Appointment[] = [
     price: 250,
     status: 'completed',
     visitCount: 3,
+    structuredTags: ['Sakal: Kirli', 'İkram: Sade Kahve'],
     createdAt: new Date().toISOString(),
   },
   {
@@ -119,6 +120,7 @@ export const initialAppointments: Appointment[] = [
     status: 'completed',
     visitCount: 6,
     notes: 'Ense sıfır değil, doğal bırakılsın.',
+    structuredTags: ['Ense: Natürel', 'Fade: 1 Numara', 'Sessiz Tıraş'],
     createdAt: new Date().toISOString(),
   },
   {
@@ -136,6 +138,7 @@ export const initialAppointments: Appointment[] = [
     price: 850,
     status: 'in_chair',
     visitCount: 2,
+    structuredTags: ['Fade: 0 Numara', 'İkram: Çay'],
     createdAt: new Date().toISOString(),
   },
   {
@@ -153,6 +156,7 @@ export const initialAppointments: Appointment[] = [
     price: 250,
     status: 'completed',
     visitCount: 1,
+    structuredTags: ['Hassas Cilt', 'Balsam'],
     createdAt: new Date().toISOString(),
   },
   {
@@ -310,10 +314,14 @@ export function calculateAvailableSlots(
     const staff = staffList.find((s) => s.id === staffId);
     if (staff) {
       if (staff.weeklyOffDays && staff.weeklyOffDays.includes(dayOfWeek)) {
-        return []; // Personel haftalık izinli gününde
+        return [
+          { time: 'Tüm Gün', available: false, reason: 'off', detail: 'Usta Haftalık İzinli' }
+        ];
       }
       if (staff.leaveDates && staff.leaveDates.includes(dateStr)) {
-        return []; // Personel bu tarihte izinli / gelmedi
+        return [
+          { time: 'Tüm Gün', available: false, reason: 'off', detail: 'Usta İzinli / Salonda Yok' }
+        ];
       }
     }
   }
@@ -329,7 +337,11 @@ export function calculateAvailableSlots(
     isClosed: false,
   };
 
-  if (wh.isClosed) return [];
+  if (wh.isClosed) {
+    return [
+      { time: 'Tüm Gün', available: false, reason: 'off', detail: 'Salon Kapalı (Tatil)' }
+    ];
+  }
 
   const slots: TimeSlot[] = [];
   const [startH, startM] = wh.startTime.split(':').map(Number);
@@ -355,9 +367,7 @@ export function calculateAvailableSlots(
         (slotEndMin > breakStartMin && slotEndMin <= breakEndMin) ||
         (slotStartMin <= breakStartMin && slotEndMin >= breakEndMin));
 
-    if (inBreak) continue;
-
-    const hasConflict = staffDayApts.some((apt) => {
+    const conflictApt = staffDayApts.find((apt) => {
       const [aptSh, aptSm] = apt.startTime.split(':').map(Number);
       const [aptEh, aptEm] = apt.endTime.split(':').map(Number);
       const aptStart = aptSh * 60 + aptSm;
@@ -372,11 +382,30 @@ export function calculateAvailableSlots(
 
     const hh = String(Math.floor(slotStartMin / 60)).padStart(2, '0');
     const mm = String(slotStartMin % 60).padStart(2, '0');
+    const timeStr = `${hh}:${mm}`;
 
-    slots.push({
-      time: `${hh}:${mm}`,
-      available: !hasConflict,
-    });
+    if (inBreak) {
+      slots.push({
+        time: timeStr,
+        available: false,
+        reason: 'break',
+        detail: 'Personel Molası'
+      });
+    } else if (conflictApt) {
+      slots.push({
+        time: timeStr,
+        available: false,
+        reason: 'busy',
+        detail: conflictApt.status === 'break' ? 'Koltuk Mola' : 'Dolu'
+      });
+    } else {
+      slots.push({
+        time: timeStr,
+        available: true,
+        reason: 'available',
+        detail: 'Müsait'
+      });
+    }
   }
 
   return slots;

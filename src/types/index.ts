@@ -64,7 +64,7 @@ export interface WorkingHours {
   isClosed: boolean;
 }
 
-export type AppointmentStatus = 'pending' | 'confirmed' | 'in_chair' | 'completed' | 'cancelled' | 'break';
+export type AppointmentStatus = 'pending' | 'confirmed' | 'in_chair' | 'completed' | 'cancelled' | 'no_show' | 'break';
 
 export interface Appointment {
   id: string;
@@ -82,6 +82,7 @@ export interface Appointment {
   status: AppointmentStatus;
   fcmToken?: string;
   notes?: string;
+  structuredTags?: string[]; // Örn: ['Ense: Natürel', 'Fade: 1 Numara', 'Sessiz Tıraş', 'İkram: Çay']
   visitCount?: number;
   recurringDays?: number;  // Otomatik döngü varsa (örn: 20)
   createdAt: string;
@@ -93,11 +94,13 @@ export interface CustomerProfile {
   name: string;
   phone: string;
   totalVisits: number;
+  noShowCount?: number;
   lastVisitDate: string;
   favoriteService?: string;
   favoriteStaff?: string; // Atanan Personel Adı
   assignedStaffId?: string; // Atanan Personel ID'si
   specialNotes?: string;
+  structuredTags?: string[]; // Kalıcı müşteri tercih etiketleri
   recurringDays?: number;  // Müşterinin periyodik döngü tercihi
   createdAt: string;
 }
@@ -105,6 +108,8 @@ export interface CustomerProfile {
 export interface TimeSlot {
   time: string;
   available: boolean;
+  reason?: 'available' | 'busy' | 'break' | 'off' | 'past';
+  detail?: string;
 }
 
 export interface SystemAdmin {

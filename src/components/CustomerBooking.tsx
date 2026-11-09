@@ -152,8 +152,9 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
   const [selectedTime, setSelectedTime] = useState<string>('');
   const [showFullCalendar, setShowFullCalendar] = useState<boolean>(false);
 
-  // Not
+  // Not ve Berber Tercih Çipleri
   const [notes, setNotes] = useState<string>('');
+  const [selectedTags, setSelectedTags] = useState<string[]>(['Ense: Natürel']);
 
   // 🔄 OTOMATİK PERİYODİK TIRAŞ DÖNGÜSÜ
   const [isRecurringEnabled, setIsRecurringEnabled] = useState<boolean>(false);
@@ -253,6 +254,7 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
         price: selectedService.price,
         status: salon.autoConfirm ? ('confirmed' as const) : ('pending' as const),
         notes: `VIP Periyodik Randevu Serisi (${idx + 1}/${generatedDates.length})${notes ? ` • ${notes}` : ''}`,
+        structuredTags: selectedTags,
         recurringDays: recurringType === 'interval_days' ? recurringDays : 30,
       }));
 
@@ -275,6 +277,7 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
         price: selectedService.price,
         status: salon.autoConfirm ? 'confirmed' : 'pending',
         notes,
+        structuredTags: selectedTags,
         recurringDays: isRecurringEnabled ? recurringDays : undefined,
       });
       setBookingSuccessMsg(
@@ -529,34 +532,70 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
               </div>
             )}
 
-            {/* SAAT SLOTLARI (Seçilen Ustanın Müsait Saatleri) */}
+            {/* SAAT SLOTLARI (Seçilen Ustanın Müsait Saatleri - Açıklamalı & Şeffaf Grid) */}
             <div>
               <div className="flex items-center justify-between text-xs text-stone-600 mb-2.5 font-medium">
                 <span><strong>{selectedStaff.name}</strong> için randevu saatleri:</span>
-                <span className="font-mono text-stone-400">
-                  {availableSlots.filter((s) => s.available).length} boş koltuk
-                </span>
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="flex items-center gap-1 text-emerald-700 font-bold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                    {availableSlots.filter((s) => s.available).length} Boş Koltuk
+                  </span>
+                  <span className="text-stone-300">•</span>
+                  <span className="flex items-center gap-1 text-stone-400">
+                    <span className="w-2 h-2 rounded-full bg-stone-300 inline-block" /> Dolu / Mola
+                  </span>
+                </div>
               </div>
 
               {availableSlots.length > 0 ? (
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {availableSlots.map((slot) => {
                     const isSelected = selectedTime === slot.time;
+                    const isBreak = slot.reason === 'break';
+                    const isBusy = slot.reason === 'busy';
+                    const isOff = slot.reason === 'off';
+
+                    if (!slot.available) {
+                      return (
+                        <div
+                          key={slot.time}
+                          className={`py-2 px-1.5 text-center rounded-xl min-h-[48px] flex flex-col justify-center items-center border cursor-not-allowed select-none transition ${
+                            isBreak
+                              ? 'bg-amber-50/80 border-amber-200 text-amber-800/80'
+                              : isOff
+                              ? 'bg-rose-50/80 border-rose-200 text-rose-800/80'
+                              : 'bg-stone-100 border-stone-200 text-stone-400'
+                          }`}
+                          title={slot.detail || 'Bu saat seçilemez'}
+                        >
+                          <span className="font-mono text-xs font-semibold line-through opacity-70">
+                            {slot.time}
+                          </span>
+                          <span className="text-[9px] font-bold mt-0.5 tracking-tight">
+                            {isBreak ? '☕ Mola' : isOff ? '⛔ İzinli' : '🔴 Dolu'}
+                          </span>
+                        </div>
+                      );
+                    }
+
                     return (
                       <button
                         type="button"
                         key={slot.time}
-                        disabled={!slot.available}
                         onClick={() => setSelectedTime(slot.time)}
-                        className={`py-2.5 px-2 text-center rounded-xl text-xs font-mono font-bold transition border ${
-                          !slot.available
-                            ? 'bg-stone-100 text-stone-400 border-stone-200 cursor-not-allowed line-through'
-                            : isSelected
-                            ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-sm ring-1 ring-[#B86B35]'
-                            : 'bg-white text-stone-800 border-stone-200 hover:border-stone-400'
+                        className={`py-2 px-1.5 text-center rounded-xl min-h-[48px] flex flex-col justify-center items-center transition border active:scale-95 ${
+                          isSelected
+                            ? 'bg-[#B86B35] text-white border-[#B86B35] shadow-md ring-2 ring-[#B86B35]/30'
+                            : 'bg-white text-stone-900 border-stone-200 hover:border-[#B86B35] hover:bg-stone-50'
                         }`}
                       >
-                        {slot.time}
+                        <span className="font-mono text-xs font-black">
+                          {slot.time}
+                        </span>
+                        <span className={`text-[9px] font-extrabold mt-0.5 ${isSelected ? 'text-amber-200' : 'text-emerald-600'}`}>
+                          {isSelected ? '✓ Seçildi' : 'Müsait'}
+                        </span>
                       </button>
                     );
                   })}
@@ -702,9 +741,51 @@ export const CustomerBooking: React.FC<CustomerBookingProps> = ({
               )}
             </div>
 
+            {/* BERBER TERCİH ÇİPLERİ (YAPILANDIRILMIŞ İSTEKLER) */}
+            <div className="space-y-1.5">
+              <label className="block text-stone-700 font-semibold text-xs">
+                Berber Tercihleriniz (Tek Dokunuşla Seçin):
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Ense: Natürel',
+                  'Ense: Çizik/Düz',
+                  'Fade: 1 Numara',
+                  'Fade: 0 Numara',
+                  'Sessiz Tıraş',
+                  'İkram: Sade Kahve',
+                  'İkram: Çay',
+                  'Hassas Cilt'
+                ].map((tag) => {
+                  const isChecked = selectedTags.includes(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => {
+                        if (isChecked) {
+                          setSelectedTags(selectedTags.filter((t) => t !== tag));
+                        } else {
+                          setSelectedTags([...selectedTags, tag]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition border flex items-center gap-1 active:scale-95 ${
+                        isChecked
+                          ? 'bg-[#FAF3EE] border-[#B86B35] text-[#B86B35] font-bold shadow-2xs'
+                          : 'bg-stone-50 border-stone-200 text-stone-600 hover:border-stone-400'
+                      }`}
+                    >
+                      <span>🏷️</span>
+                      <span>{tag}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* OPSİYONEL BERBERE NOT */}
             <div>
-              <label className="block text-stone-700 font-semibold mb-1 text-xs">Ustanıza Not (Opsiyonel)</label>
+              <label className="block text-stone-700 font-semibold mb-1 text-xs">Ustanıza Ek Not (Opsiyonel)</label>
               <input
                 type="text"
                 placeholder="Örn: Yanlar 2 numara, favoriler uzun kalsın..."
