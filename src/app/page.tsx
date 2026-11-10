@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UserRole, Salon, Staff, Service, Appointment, AuthUser, CustomerProfile, SystemAdmin, WorkingHours } from '@/types';
+import { UserRole, Salon, Staff, Service, Appointment, AuthUser, CustomerProfile, SystemAdmin, WorkingHours, AuditLog } from '@/types';
 import {
   initialSalon,
   initialStaff,
@@ -10,6 +10,7 @@ import {
   initialCustomers,
   initialAdmins,
   initialWorkingHours,
+  initialAuditLogs,
 } from '@/lib/dataStore';
 import { supabase } from '@/lib/supabase';
 import { AuthScreen } from '@/components/AuthScreen';
@@ -58,6 +59,7 @@ export default function Home() {
   const [customers, setCustomers] = useState<CustomerProfile[]>(initialCustomers);
   const [admins, setAdmins] = useState<SystemAdmin[]>(initialAdmins);
   const [workingHours, setWorkingHours] = useState<WorkingHours[]>(initialWorkingHours);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(initialAuditLogs);
 
   const [notifications, setNotifications] = useState<PushNotification[]>([]);
   const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
@@ -432,9 +434,36 @@ export default function Home() {
   };
 
   const handleUpdateAppointmentStatus = (aptId: string, newStatus: Appointment['status']) => {
+    const existing = appointments.find((a) => a.id === aptId);
+    const prevStatus = existing?.status;
+
     setAppointments((prev) =>
       prev.map((a) => (a.id === aptId ? { ...a, status: newStatus } : a))
     );
+
+    if (existing && prevStatus && prevStatus !== newStatus) {
+      const salon = salons.find((s) => s.id === existing.salonId) || activeSalon;
+      const actorName = currentUser ? currentUser.name : 'Murat Can (Usta)';
+      const actorRole = currentUser ? currentUser.role : 'barber_staff';
+
+      const newLog: AuditLog = {
+        id: `log-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorName,
+        actorRole,
+        salonId: existing.salonId,
+        salonName: salon.name,
+        action: newStatus === 'cancelled' ? 'appointment_cancel' : 'status_change',
+        description: `${existing.customerName} randevusu "${newStatus}" durumuna güncellendi.`,
+        targetType: 'appointment',
+        targetId: aptId,
+        previousState: { status: prevStatus },
+        newState: { status: newStatus },
+        isReversed: false,
+      };
+      setAuditLogs((prev) => [newLog, ...prev]);
+    }
+
     addNotification(
       'Durum Değişti',
       `Randevu durumu "${
@@ -444,9 +473,91 @@ export default function Home() {
           ? 'Koltukta / Tıraş Başladı'
           : newStatus === 'cancelled'
           ? 'İptal'
+          : newStatus === 'no_show'
+          ? 'Gelmedi (No-Show)'
           : 'Onaylı'
       }" yapıldı.`
     );
+  };
+
+  // SÜPER ADMİN: ANINDA MÜDAHALE (RANDEVU DÜZENLEME, USTA AKTARMA, SAAT DEĞİŞTİRME)
+  const handleAdminUpdateAppointment = (aptId: string, updates: Partial<Appointment>, reason?: string) => {
+    const existing = appointments.find((a) => a.id === aptId);
+    if (!existing) return;
+
+    const previousState: Partial<Appointment> = {};
+    Object.keys(updates).forEach((k) => {
+      const key = k as keyof Appointment;
+      // @ts-ignore
+      previousState[key] = existing[key];
+    });
+
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === aptId ? { ...a, ...updates } : a))
+    );
+
+    const salon = salons.find((s) => s.id === existing.salonId) || activeSalon;
+    const newLog: AuditLog = {
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      actorName: currentUser?.name || 'Salih Yıldız (Süper Admin)',
+      actorRole: 'admin',
+      salonId: existing.salonId,
+      salonName: salon.name,
+      action: updates.staffId ? 'staff_reassign' : updates.startTime || updates.appointmentDate ? 'appointment_reschedule' : 'status_change',
+      description: `Acil Müdahale: ${existing.customerName} randevusu güncellendi (${reason || 'Admin Müdahalesi'}).`,
+      targetType: 'appointment',
+      targetId: aptId,
+      previousState,
+      newState: updates,
+      isReversed: false,
+    };
+    setAuditLogs((prev) => [newLog, ...prev]);
+    addNotification('Acil Müdahale Yapıldı', `${existing.customerName} randevusuna başarıyla müdahale edildi.`);
+  };
+
+  // SÜPER ADMİN: TEK TUŞLA İŞLEM GERİ ALMA (ROLLBACK / UNDO)
+  const handleRollbackAuditLog = (logId: string) => {
+    const log = auditLogs.find((l) => l.id === logId);
+    if (!log || log.isReversed) return;
+
+    if (log.targetType === 'appointment' && log.previousState) {
+      setAppointments((prev) =>
+        prev.map((a) => (a.id === log.targetId ? { ...a, ...log.previousState } : a))
+      );
+
+      // Log kaydını geri alındı olarak işaretle
+      setAuditLogs((prev) =>
+        prev.map((l) => (l.id === logId ? { ...l, isReversed: true } : l))
+      );
+
+      // Yeni bir geri alma denetim kaydı oluştur
+      const rollbackLog: AuditLog = {
+        id: `log-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorName: currentUser?.name || 'Salih Yıldız (Süper Admin)',
+        actorRole: 'admin',
+        salonId: log.salonId,
+        salonName: log.salonName,
+        action: 'rollback',
+        description: `↩️ Geri Alma: "${log.description}" işlemi geri alındı ve önceki haline döndürüldü.`,
+        targetType: 'appointment',
+        targetId: log.targetId,
+        isReversed: false,
+      };
+      setAuditLogs((prev) => [rollbackLog, ...prev]);
+
+      addNotification('İşlem Geri Alındı', `İşlem başarıyla geri alındı ve randevu eski durumuna döndürüldü.`);
+    }
+  };
+
+  // SÜPER ADMİN: SALONU CANLI YÖNET / TAKLİT ET (IMPERSONATE)
+  const handleImpersonateSalon = (salonId: string) => {
+    const targetSalon = salons.find((s) => s.id === salonId);
+    if (!targetSalon) return;
+    setActiveSalon(targetSalon);
+    setCurrentView('barber');
+    addNotification('Salon Koltuğuna Geçildi', `${targetSalon.name} yönetim ekranına canlı geçildi.`);
   };
 
   const handleToggleSalonStatus = (salonId: string) => {
@@ -657,13 +768,20 @@ export default function Home() {
         {currentView === 'admin' && (
           <AdminDashboard
             salons={salons}
+            staffList={staffList}
+            customers={customers}
+            services={services}
             appointments={appointments}
             admins={admins}
+            auditLogs={auditLogs}
             onToggleSalonStatus={handleToggleSalonStatus}
             onAddSalon={handleAddSalon}
             onAddAdmin={handleAddAdmin}
             onToggleAdminStatus={handleToggleAdminStatus}
             onDeleteAdmin={handleDeleteAdmin}
+            onAdminUpdateAppointment={handleAdminUpdateAppointment}
+            onRollbackAuditLog={handleRollbackAuditLog}
+            onImpersonateSalon={handleImpersonateSalon}
           />
         )}
       </main>

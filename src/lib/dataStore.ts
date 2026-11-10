@@ -1,4 +1,4 @@
-import { Salon, Staff, Service, WorkingHours, Appointment, TimeSlot, CustomerProfile, SystemAdmin } from '@/types';
+import { Salon, Staff, Service, WorkingHours, Appointment, TimeSlot, CustomerProfile, SystemAdmin, AuditLog } from '@/types';
 
 export const initialAdmins: SystemAdmin[] = [
   {
@@ -410,3 +410,51 @@ export function calculateAvailableSlots(
 
   return slots;
 }
+
+export const initialAuditLogs: AuditLog[] = [
+  {
+    id: 'log-1',
+    timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+    actorName: 'Murat Can (Usta)',
+    actorRole: 'barber_staff',
+    salonId: 'salon-1',
+    salonName: 'Atelier de Coupe',
+    action: 'status_change',
+    description: "Selim T. randevusu 'Koltukta / İşlemde' durumuna alındı.",
+    targetType: 'appointment',
+    targetId: 'apt-selim',
+    previousState: { status: 'confirmed' },
+    newState: { status: 'in_chair' },
+    isReversed: false,
+  },
+  {
+    id: 'log-2',
+    timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+    actorName: 'Mert B. (Müşteri)',
+    actorRole: 'customer',
+    salonId: 'salon-1',
+    salonName: 'Atelier de Coupe',
+    action: 'appointment_cancel',
+    description: "09:00 Sakal Tıraşı randevusu müşteri tarafından iptal edildi.",
+    targetType: 'appointment',
+    targetId: 'apt-mert',
+    previousState: { status: 'completed' },
+    newState: { status: 'cancelled' },
+    isReversed: false,
+  },
+  {
+    id: 'log-3',
+    timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+    actorName: 'Salih Yıldız (Süper Admin)',
+    actorRole: 'admin',
+    salonId: 'salon-1',
+    salonName: 'Atelier de Coupe',
+    action: 'staff_reassign',
+    description: "Bora Aksoy randevusu Emre Yıldız'dan Murat Can'a aktarıldı.",
+    targetType: 'appointment',
+    targetId: 'apt-bora',
+    previousState: { staffId: 'staff-2', staffName: 'Emre Yıldız' },
+    newState: { staffId: 'staff-1', staffName: 'Murat Can' },
+    isReversed: false,
+  },
+];

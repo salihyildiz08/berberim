@@ -120,3 +120,19 @@ export interface SystemAdmin {
   isActive: boolean;
   createdAt: string;
 }
+
+export interface AuditLog {
+  id: string;
+  timestamp: string;
+  actorName: string;
+  actorRole: 'admin' | 'barber_owner' | 'barber_staff' | 'customer' | 'system';
+  salonId: string;
+  salonName: string;
+  action: 'status_change' | 'appointment_create' | 'appointment_reschedule' | 'staff_reassign' | 'appointment_cancel' | 'rollback';
+  description: string;
+  targetType: 'appointment' | 'customer' | 'staff' | 'salon';
+  targetId: string;
+  previousState?: Partial<Appointment>;
+  newState?: Partial<Appointment>;
+  isReversed?: boolean;
+}
