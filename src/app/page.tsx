@@ -1,885 +1,1356 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UserRole, Salon, Staff, Service, Appointment, AuthUser, CustomerProfile, SystemAdmin, WorkingHours, AuditLog } from '@/types';
-import {
-  initialSalon,
-  initialStaff,
-  initialServices,
-  initialAppointments,
-  initialCustomers,
-  initialAdmins,
-  initialWorkingHours,
-  initialAuditLogs,
-} from '@/lib/dataStore';
-import { supabase } from '@/lib/supabase';
-import { AuthScreen } from '@/components/AuthScreen';
-import { CustomerBooking } from '@/components/CustomerBooking';
-import { BarberDashboard } from '@/components/BarberDashboard';
-import { AdminDashboard } from '@/components/AdminDashboard';
-import { NotificationToast, PushNotification } from '@/components/NotificationToast';
-import {
-  Scissors,
-  User,
-  ShieldCheck,
-  Smartphone,
-  LogOut,
-  UserCheck,
-  Bell,
-  Settings,
-} from 'lucide-react';
+
+interface ServiceItem {
+  id: number;
+  n: string;
+  p: number;
+  d: number;
+}
+
+interface StaffItem {
+  id: number;
+  n: string;
+}
+
+interface CustomerItem {
+  id: number;
+  name: string;
+  phone: string;
+  pw: string;
+}
+
+interface AppointmentItem {
+  id: number;
+  cid: number;
+  name: string;
+  svc: number;
+  stf: number;
+  date: string;
+  time: string;
+  st: 'onayli' | 'geldi' | 'koltukta' | 'tamam' | 'iptal' | 'noshow';
+  chips: string[];
+}
+
+interface LogItem {
+  id: number;
+  t: string;
+  txt: string;
+  a: number;
+  prev: string;
+  u: boolean;
+}
+
+interface ShopItem {
+  n: string;
+  u: string;
+  a: string;
+  t: string;
+}
+
+const SV: ServiceItem[] = [
+  { id: 1, n: 'İmza Saç Kesimi', p: 450, d: 45 },
+  { id: 2, n: 'Sakal Tıraşı', p: 250, d: 30 },
+  { id: 3, n: 'Saç + Sakal', p: 650, d: 75 },
+];
+
+const ST: StaffItem[] = [
+  { id: 1, n: 'Murat Can' },
+  { id: 2, n: 'Emre Yıldız' },
+  { id: 3, n: 'Tolga Demir' },
+];
+
+const OPEN = 480; // 08:00
+const CLOSE = 1260; // 21:00
+const BS = 780; // 13:00
+const BE = 840; // 14:00
+const CLOSED_DAY = 0; // Pazar
+
+const MON = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+const DN = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+
+const iso = (d: Date) =>
+  d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+
+const addDays = (s: string, n: number) => {
+  const d = new Date(s + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return iso(d);
+};
+
+const fd = (s: string) => {
+  const d = new Date(s + 'T12:00:00');
+  return d.getDate() + ' ' + MON[d.getMonth()] + ' ' + DN[d.getDay()];
+};
+
+const mm = (t: string) => {
+  const [a, b] = t.split(':');
+  return +a * 60 + +b;
+};
+
+const tt = (m: number) =>
+  ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2);
+
+const CHIPS = ['Ense: Natürel', 'Sessiz Tıraş', 'İkram: Sade Kahve', 'Makine Boyu: 2', 'İkram: Çay'];
+
+const LB: Record<string, string> = {
+  onayli: 'Onaylı',
+  geldi: 'Geldi',
+  koltukta: 'Koltukta',
+  tamam: 'Tamamlandı',
+  iptal: 'İptal',
+  noshow: 'Gelmedi',
+};
+
+const nd = (s: string) => {
+  let d = (s || '').replace(/\D/g, '');
+  if (d.length === 12 && d.startsWith('90')) d = d.slice(2);
+  return d.replace(/^0/, '');
+};
 
 export default function Home() {
-  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
-  const [currentView, setCurrentView] = useState<'admin' | 'barber' | 'customer'>('admin');
+  const today = iso(new Date());
 
-  const [salons, setSalons] = useState<Salon[]>([
-    initialSalon,
-    {
-      id: 'salon-2',
-      name: 'Gentlemen’s House • Nişantaşı',
-      slug: 'gentlemens-house',
-      ownerEmail: 'nisantasi@gentlemens.com',
-      phone: '0212 234 56 78',
-      city: 'İstanbul',
-      district: 'Şişli',
-      address: 'Teşvikiye Cad. No: 18, Nişantaşı',
-      autoConfirm: true,
-      autoComplete: true,
-      isActive: true,
-      subscriptionStatus: 'active',
-      createdAt: '2026-02-01T10:00:00Z',
-    },
+  const [view, setView] = useState<'c' | 'b' | 'a'>('c');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Veri Durumu
+  const [CUS, setCUS] = useState<CustomerItem[]>([
+    { id: 1, name: 'Can Kaya', phone: '05551112233', pw: '1234' },
+    { id: 2, name: 'Mert B.', phone: '05552223344', pw: '1234' },
+    { id: 3, name: 'Selim Bey', phone: '05553334455', pw: '1234' },
+    { id: 4, name: 'Ali V.', phone: '05554445566', pw: '1234' },
+    { id: 5, name: 'Burak Bey', phone: '05556667788', pw: '1234' },
   ]);
 
-  const [activeSalon, setActiveSalon] = useState<Salon>(initialSalon);
-  const [staffList, setStaffList] = useState<Staff[]>(initialStaff);
-  const [services, setServices] = useState<Service[]>(initialServices);
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
-  const [customers, setCustomers] = useState<CustomerProfile[]>(initialCustomers);
-  const [admins, setAdmins] = useState<SystemAdmin[]>(initialAdmins);
-  const [workingHours, setWorkingHours] = useState<WorkingHours[]>(initialWorkingHours);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(initialAuditLogs);
+  const [appts, setAppts] = useState<AppointmentItem[]>([
+    { id: 1, cid: 2, name: 'Mert B.', svc: 1, stf: 1, date: addDays(today, 7), time: '11:00', st: 'onayli', chips: [] },
+    { id: 2, cid: 1, name: 'Can Kaya', svc: 1, stf: 1, date: today, time: '15:00', st: 'onayli', chips: ['Ense: Natürel', 'Sessiz Tıraş', 'İkram: Sade Kahve'] },
+    { id: 3, cid: 3, name: 'Selim Bey', svc: 1, stf: 1, date: today, time: '16:30', st: 'onayli', chips: [] },
+    { id: 4, cid: 4, name: 'Ali V.', svc: 2, stf: 3, date: today, time: '10:00', st: 'tamam', chips: [] },
+    { id: 5, cid: 1, name: 'Can Kaya', svc: 1, stf: 1, date: addDays(today, -20), time: '15:00', st: 'tamam', chips: ['Ense: Natürel'] },
+    { id: 6, cid: 1, name: 'Can Kaya', svc: 3, stf: 1, date: addDays(today, -40), time: '16:00', st: 'tamam', chips: [] },
+    { id: 7, cid: 1, name: 'Can Kaya', svc: 2, stf: 2, date: addDays(today, 12), time: '17:00', st: 'onayli', chips: [] },
+  ]);
 
-  const [notifications, setNotifications] = useState<PushNotification[]>([]);
-  const [showSettingsModal, setShowSettingsModal] = useState<boolean>(false);
-  const [nativeNotifStatus, setNativeNotifStatus] = useState<'default' | 'granted' | 'denied'>('default');
+  const [off, setOff] = useState<Record<number, boolean>>({ 1: false, 2: false, 3: false });
+  const [log, setLog] = useState<LogItem[]>([]);
+  const [shops, setShops] = useState<ShopItem[]>([
+    { n: 'Atelier de Coupe', u: 'atelier-de-coupe', a: 'Bağdat Cad. No: 342', t: '0216 000 00 00' },
+  ]);
 
-  // Supabase Google OAuth Giriş Dinleyicisi
+  const [me, setMe] = useState<number | null>(1); // Varsayılan Can Kaya oturumu
+
+  // Müşteri Randevu Alma Durumu
+  const [C, setC] = useState<{
+    svc: number;
+    stf: number;
+    date: string;
+    time: string | null;
+    chips: string[];
+    done: boolean;
+  }>({
+    svc: 1,
+    stf: 1,
+    date: today,
+    time: null,
+    chips: [],
+    done: false,
+  });
+
+  // Giriş Formu State
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPw, setLoginPw] = useState('');
+
+  // Yeni Müşteri Tanımlama State
+  const [newCusName, setNewCusName] = useState('');
+  const [newCusPhone, setNewCusPhone] = useState('');
+  const [newCusPw, setNewCusPw] = useState('');
+
+  // Periyodik Randevu Serisi State
+  const [seriesCustomer, setSeriesCustomer] = useState<number>(5);
+  const [seriesStartDate, setSeriesStartDate] = useState<string>(() => {
+    let st = addDays(today, 1);
+    while (new Date(addDays(st, 20) + 'T12:00:00').getDay() === 0) st = addDays(st, 1);
+    return st;
+  });
+  const [seriesInterval, setSeriesInterval] = useState<number>(20);
+  const [seriesTime, setSeriesTime] = useState<string>('16:00');
+  const [seriesMonths, setSeriesMonths] = useState<number>(5);
+  const [seriesPreview, setSeriesPreview] = useState<{
+    cid: number;
+    name: string;
+    time: string;
+    l: { date: string; moved?: number }[];
+  } | null>(null);
+
+  // Admin Müdahale & Arama State
+  const [adminQuery, setAdminQuery] = useState('');
+  const [editAptId, setEditAptId] = useState<number | null>(null);
+  const [editStaffId, setEditStaffId] = useState<number>(1);
+  const [editTimeVal, setEditTimeVal] = useState<string>('15:00');
+  const [editNote, setEditNote] = useState<string>('Müşteri trafikte kaldığını iletti, saat ayarlandı.');
+
+  // Yeni Salon State
+  const [newShopName, setNewShopName] = useState('');
+  const [newShopSlug, setNewShopSlug] = useState('');
+  const [newShopAddress, setNewShopAddress] = useState('');
+  const [newShopPhone, setNewShopPhone] = useState('');
+
+  // LocalStorage senkronizasyonu
   useEffect(() => {
-    if (!supabase) return;
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Çıkış yapıldığında kullanıcıyı null yap ve asla tekrar login yapma
-      if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-        return;
+    try {
+      const stored = localStorage.getItem('berberim2');
+      if (stored) {
+        const x = JSON.parse(stored);
+        if (x.CUS) setCUS(x.CUS);
+        if (x.appts) setAppts(x.appts);
+        if (x.log) setLog(x.log);
+        if (x.off) setOff(x.off);
+        if (x.shops) setShops(x.shops);
       }
-
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user && !currentUser) {
-        const userEmail = session.user.email?.toLowerCase() || '';
-        const userName = session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Kullanıcı';
-
-        // Süper Admin kontrolü (Salih Yıldız veya eklenen adminler)
-        const isAdmin = userEmail === 'yldzsalih27@gmail.com' || admins.some((a) => a.email.toLowerCase() === userEmail && a.isActive);
-
-        if (isAdmin) {
-          handleLoginSuccess({
-            id: session.user.id,
-            name: userEmail === 'yldzsalih27@gmail.com' ? 'Salih Yıldız (Süper Admin)' : `${userName} (Süper Admin)`,
-            email: userEmail,
-            role: 'admin',
-          });
-        } else {
-          // Personel kontrolü
-          const matchingStaff = staffList.find((s) => s.email.toLowerCase() === userEmail);
-          if (matchingStaff) {
-            handleLoginSuccess({
-              id: session.user.id,
-              name: matchingStaff.name,
-              email: matchingStaff.email,
-              role: 'barber_staff',
-              salonId: activeSalon.id,
-              staffId: matchingStaff.id,
-            });
-          } else {
-            // Müşteri
-            handleLoginSuccess({
-              id: session.user.id,
-              name: userName,
-              email: userEmail,
-              role: 'customer',
-              salonId: activeSalon.id,
-            });
-          }
-        }
+      const s = localStorage.getItem('berberim_s');
+      if (s) {
+        const numId = +s;
+        setMe(numId);
       }
-    });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, [admins, staffList, activeSalon, currentUser]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      setNativeNotifStatus(Notification.permission);
+    } catch (e) {
+      console.error(e);
     }
   }, []);
 
-  const requestNativeNotification = async () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      const permission = await Notification.requestPermission();
-      setNativeNotifStatus(permission);
-      if (permission === 'granted') {
-        new Notification('🔔 Banka Tarzı Bildirimler Aktif!', {
-          body: 'Randevu hatırlatmaları, onaylar ve usta çağrıları artık telefon/bilgisayar kilit ekranınıza gelecek.',
-        });
-        addNotification('Cihaz Bildirimi Aktif', 'Banka standardında anlık push bildirim izni başarıyla verildi.');
-      }
-    }
-  };
-
-  const handleLoginSuccess = (user: AuthUser) => {
-    setCurrentUser(user);
-    if (user.role === 'admin') {
-      setCurrentView('admin');
-    } else if (user.role === 'barber_owner') {
-      setCurrentView('barber');
-    } else if (user.role === 'barber_staff') {
-      setCurrentView('barber');
-    } else {
-      setCurrentView('customer');
-    }
-  };
-
-  const handleLogout = async () => {
+  const saveToStorage = (
+    newCus = CUS,
+    newAppts = appts,
+    newLog = log,
+    newOff = off,
+    newShops = shops
+  ) => {
     try {
-      if (supabase) {
-        await supabase.auth.signOut();
-      }
+      localStorage.setItem(
+        'berberim2',
+        JSON.stringify({ CUS: newCus, appts: newAppts, log: newLog, off: newOff, shops: newShops })
+      );
     } catch (e) {
-      console.warn('Signout error:', e);
-    }
-    setCurrentUser(null);
-    setNotifications([]);
-    if (typeof window !== 'undefined') {
-      try {
-        localStorage.clear();
-        sessionStorage.clear();
-      } catch (e) {}
+      console.error(e);
     }
   };
 
-  const addNotification = (
-    title: string,
-    message: string,
-    actions?: { label: string; action: () => void; variant?: 'success' | 'danger' }[]
-  ) => {
-    const newNotif: PushNotification = {
-      id: `notif-${Date.now()}`,
-      title,
-      message,
-      time: new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
-      actions,
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => {
+      setToastMsg((cur) => (cur === msg ? null : cur));
+    }, 2600);
+  };
+
+  const sv = (id: number) => SV.find((x) => x.id === id) || SV[0];
+  const sf = (id: number) => ST.find((x) => x.id === id) || ST[0];
+  const currentCustomer = CUS.find((x) => x.id === me);
+
+  const ntime = () => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  };
+
+  const busy = (stf: number, date: string, t: string, ign?: number) => {
+    const m = mm(t);
+    return appts.some(
+      (a) =>
+        a.id !== ign &&
+        a.stf === stf &&
+        a.date === date &&
+        !['iptal', 'noshow'].includes(a.st) &&
+        m >= mm(a.time) &&
+        m < mm(a.time) + sv(a.svc).d
+    );
+  };
+
+  const slotState = (stf: number, date: string, t: string): ['off' | 'free', string] => {
+    const m = mm(t);
+    if (new Date(date + 'T12:00:00').getDay() === CLOSED_DAY) return ['off', 'Kapalı'];
+    if (off[stf]) return ['off', '⛔ Usta İzinli'];
+    if (m >= BS && m < BE) return ['off', '☕ Personel Molası'];
+    if (date === today && m < ntime()) return ['off', 'Geçti'];
+    if (busy(stf, date, t)) return ['off', '🔴 Dolu'];
+    return ['free', 'Boş / Müsait'];
+  };
+
+  const slots = () => {
+    const r: string[] = [];
+    for (let m = OPEN; m < CLOSE; m += 30) r.push(tt(m));
+    return r;
+  };
+
+  const addLog = (txt: string, a: AppointmentItem, prev: any, currentLog = log) => {
+    const newLogItem: LogItem = {
+      id: Date.now() + Math.random(),
+      t: new Date().toTimeString().slice(0, 5),
+      txt,
+      a: a.id,
+      prev: JSON.stringify(prev),
+      u: false,
     };
-    setNotifications((prev) => [newNotif, ...prev.slice(0, 3)]);
+    const updatedLog = [newLogItem, ...currentLog];
+    setLog(updatedLog);
+    return updatedLog;
+  };
 
-    // Gerçek İşletim Sistemi / Telefon Kilit Ekranı Bildirimi (Banka Tarzı Native Push)
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(title, {
-          body: message,
-          icon: 'https://cdn-icons-png.flaticon.com/512/2838/2838895.png',
-        });
-      } catch (err) {
-        console.error('Push notification trigger error:', err);
-      }
+  const setApp = (aId: number, patch: Partial<AppointmentItem>, txt: string) => {
+    let updatedAppts = [...appts];
+    const idx = updatedAppts.findIndex((x) => x.id === aId);
+    if (idx === -1) return;
+
+    const prev = { ...updatedAppts[idx] };
+    const updatedA = { ...updatedAppts[idx], ...patch };
+    updatedAppts[idx] = updatedA;
+    setAppts(updatedAppts);
+
+    const updatedLog = addLog(txt, updatedA, prev);
+    saveToStorage(CUS, updatedAppts, updatedLog, off, shops);
+  };
+
+  // Müşteri Giriş Yap
+  const handleLogin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const c = CUS.find((x) => nd(x.phone) === nd(loginPhone) && x.pw === loginPw);
+    if (!c) {
+      showToast('Telefon veya şifre hatalı');
+      return;
     }
+    setMe(c.id);
+    try {
+      localStorage.setItem('berberim_s', String(c.id));
+    } catch (err) {}
+    showToast('Giriş yapıldı: ' + c.name);
   };
 
-  const dismissNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  // Müşteri Çıkış Yap
+  const handleLogout = () => {
+    setMe(null);
+    try {
+      localStorage.removeItem('berberim_s');
+    } catch (err) {}
+    showToast('Çıkış yapıldı');
   };
 
-  useEffect(() => {
-    if (!activeSalon.autoComplete) return;
-
-    const interval = setInterval(() => {
-      const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
-      const currentH = now.getHours();
-      const currentM = now.getMinutes();
-      const currentTotalMin = currentH * 60 + currentM;
-
-      setAppointments((prev) =>
-        prev.map((apt) => {
-          // İleri bir tarihteki randevular (yarın veya gelecek günler) ASLA otomatik tamamlanamaz!
-          if (apt.appointmentDate > todayStr) {
-            return apt;
-          }
-
-          if (apt.status === 'confirmed' || apt.status === 'in_chair') {
-            // Geçmiş bir günün randevusu ise tamamlandı yap
-            if (apt.appointmentDate < todayStr) {
-              return { ...apt, status: 'completed' };
-            }
-
-            // Bugünün randevusu ise: sadece bitiş saati gerçekten geçmişse tamamlandı yap
-            if (apt.appointmentDate === todayStr) {
-              const [eh, em] = apt.endTime.split(':').map(Number);
-              const endTotalMin = eh * 60 + em;
-              if (currentTotalMin >= endTotalMin) {
-                return { ...apt, status: 'completed' };
-              }
-            }
-          }
-          return apt;
-        })
-      );
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [activeSalon.autoComplete]);
-
-  // Randevu alındığında müşteri rehberini de otomatik güncelle
-  const handleBookAppointment = (newAptData: Omit<Appointment, 'id' | 'createdAt'>) => {
-    const newId = `apt-${Date.now()}`;
-    const newApt: Appointment = {
-      ...newAptData,
-      id: newId,
-      createdAt: new Date().toISOString(),
+  // Müşteri Randevu Kaydet
+  const handleBook = () => {
+    if (!currentCustomer || !C.time) return;
+    const newA: AppointmentItem = {
+      id: Date.now(),
+      cid: currentCustomer.id,
+      name: currentCustomer.name,
+      svc: C.svc,
+      stf: C.stf,
+      date: C.date,
+      time: C.time,
+      st: 'onayli',
+      chips: [...C.chips],
     };
-
-    setAppointments((prev) => [newApt, ...prev]);
-
-    // Müşteri rehberinde var mı?
-    setCustomers((prev) => {
-      const existing = prev.find((c) => c.phone.replace(/\s+/g, '') === newApt.customerPhone.replace(/\s+/g, ''));
-      if (existing) {
-        return prev.map((c) =>
-          c.id === existing.id
-            ? {
-                ...c,
-                totalVisits: c.totalVisits + 1,
-                lastVisitDate: newApt.appointmentDate,
-                specialNotes: newApt.notes ? `${c.specialNotes || ''} • ${newApt.notes}` : c.specialNotes,
-              }
-            : c
-        );
-      } else {
-        const newCust: CustomerProfile = {
-          id: `cust-${Date.now()}`,
-          salonId: activeSalon.id,
-          name: newApt.customerName,
-          phone: newApt.customerPhone,
-          totalVisits: 1,
-          lastVisitDate: newApt.appointmentDate,
-          favoriteService: newApt.serviceName,
-          favoriteStaff: newApt.staffName,
-          specialNotes: newApt.notes || '',
-          createdAt: new Date().toISOString().split('T')[0],
-        };
-        return [newCust, ...prev];
-      }
+    const updatedAppts = [...appts, newA];
+    setAppts(updatedAppts);
+    const updatedLog = addLog(newA.name + ' online randevu aldı (' + newA.time + ')', newA, {
+      ...newA,
+      st: 'iptal',
     });
-
-    addNotification(
-      '💈 Yeni Randevu Kaydı',
-      `${newApt.customerName}, ${newApt.appointmentDate} saat ${newApt.startTime} için "${newApt.serviceName}" randevusu aldı.`,
-      currentUser?.role === 'admin'
-        ? [
-            {
-              label: 'Ajandada Aç',
-              action: () => setCurrentView('barber'),
-            },
-          ]
-        : undefined
-    );
+    saveToStorage(CUS, updatedAppts, updatedLog, off, shops);
+    setC((prev) => ({ ...prev, done: true }));
+    showToast('Randevu berberin ekranına düştü');
   };
 
-  const handleAddQuickAppointment = (newAptData: Omit<Appointment, 'id' | 'createdAt'>) => {
-    const newId = `apt-${Date.now()}`;
-    const newApt: Appointment = {
-      ...newAptData,
-      id: newId,
-      createdAt: new Date().toISOString(),
-    };
-
-    setAppointments((prev) => [newApt, ...prev]);
-    addNotification('Koltuk Güncellendi', `${newApt.customerName} için ajandaya kayıt eklendi.`);
-  };
-
-  const handleCancelAppointment = (aptId: string) => {
-    const apt = appointments.find((a) => a.id === aptId);
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === aptId ? { ...a, status: 'cancelled' } : a))
-    );
-
-    if (apt) {
-      addNotification(
-        'Randevu İptali',
-        `${apt.customerName} adlı müşterinin ${apt.appointmentDate} ${apt.startTime} randevusu iptal edildi. Koltuk boşa çıktı.`
-      );
-    }
-  };
-
-  const handleAddBatchAppointments = (newApts: Omit<Appointment, 'id' | 'createdAt'>[]) => {
-    const created: Appointment[] = newApts.map((a, i) => ({
-      ...a,
-      id: `apt-batch-${Date.now()}-${i}`,
-      createdAt: new Date().toISOString(),
+  // Müşteri Tercih Çipi Aç/Kapa
+  const toggleChip = (chip: string) => {
+    setC((prev) => ({
+      ...prev,
+      chips: prev.chips.includes(chip) ? prev.chips.filter((x) => x !== chip) : [...prev.chips, chip],
     }));
+  };
 
-    setAppointments((prev) => [...created, ...prev]);
+  // Berber: Randevu Durumu Değiştir
+  const handleStatusChange = (id: number, s: AppointmentItem['st']) => {
+    const a = appts.find((x) => x.id === id);
+    if (!a) return;
+    setApp(a.id, { st: s }, a.name + ' → ' + LB[s]);
+  };
 
-    // Müşterinin ziyaret sayısını ve son randevusunu güncelle
-    if (newApts.length > 0) {
-      const firstApt = newApts[0];
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.phone.replace(/\s+/g, '') === firstApt.customerPhone.replace(/\s+/g, '')
-            ? { ...c, totalVisits: c.totalVisits + newApts.length, lastVisitDate: firstApt.appointmentDate }
-            : c
-        )
-      );
+  // Berber: Randevuyu Tamamla (Akıllı Erken Tamamlanma Uyarılı)
+  const handleFinish = (id: number) => {
+    const a = appts.find((x) => x.id === id);
+    if (!a) return;
+    const end = mm(a.time) + sv(a.svc).d;
+    if (
+      a.date === today &&
+      ntime() < end &&
+      !confirm('⚠️ Randevu bitiş saati (' + tt(end) + ') henüz gelmedi. Erken mi bitirmek istiyorsunuz?')
+    ) {
+      return;
     }
-
-    addNotification(
-      '📅 Periyodik Seri Oluşturuldu',
-      `${newApts[0]?.customerName} için toplam ${newApts.length} adet sıralı randevu takvime işlendi.`
-    );
+    handleStatusChange(id, 'tamam');
+    showToast('₺' + sv(a.svc).p + ' kasaya eklendi');
   };
 
-  const handleAddCustomer = (newCustomerData: Omit<CustomerProfile, 'id' | 'createdAt'>) => {
-    const created: CustomerProfile = {
-      ...newCustomerData,
-      id: `cust-${Date.now()}`,
-      createdAt: new Date().toISOString().split('T')[0],
+  // Berber: Yeni Müşteri Tanımla
+  const handleAddCustomer = () => {
+    const n = newCusName.trim();
+    const p = nd(newCusPhone);
+    const w = newCusPw.trim();
+    if (!n || p.length !== 10 || w.length < 4) {
+      showToast('Ad, geçerli telefon (10 hane) ve en az 4 karakterli şifre gerekli');
+      return;
+    }
+    if (CUS.some((c) => nd(c.phone) === p)) {
+      showToast('Bu telefon zaten kayıtlı');
+      return;
+    }
+    const newCustomerObj: CustomerItem = {
+      id: Date.now(),
+      name: n,
+      phone: '0' + p,
+      pw: w,
     };
-    setCustomers((prev) => [created, ...prev]);
-    addNotification('Rehber Güncellendi', `${created.name} müşteri rehberine kaydedildi.`);
+    const updatedCUS = [...CUS, newCustomerObj];
+    setCUS(updatedCUS);
+    setNewCusName('');
+    setNewCusPhone('');
+    setNewCusPw('');
+    saveToStorage(updatedCUS, appts, log, off, shops);
+    showToast(n + ' tanımlandı');
   };
 
-  const handleUpdateCustomerNote = (customerId: string, note: string) => {
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === customerId ? { ...c, specialNotes: note } : c))
-    );
-    addNotification('Not Kaydedildi', 'Müşteri kesim notu güncellendi.');
+  // Berber: Şifre Değiştir
+  const handleResetCustomerPw = (id: number) => {
+    const w = prompt('Yeni şifre (en az 4 karakter):');
+    if (w && w.trim().length >= 4) {
+      const updatedCUS = CUS.map((c) => (c.id === id ? { ...c, pw: w.trim() } : c));
+      setCUS(updatedCUS);
+      saveToStorage(updatedCUS, appts, log, off, shops);
+      showToast('Şifre güncellendi');
+    }
   };
 
-  const handleUpdateCustomerStaff = (customerId: string, staffName: string, staffId?: string) => {
-    setCustomers((prev) =>
-      prev.map((c) =>
-        c.id === customerId
-          ? { ...c, favoriteStaff: staffName, assignedStaffId: staffId || c.assignedStaffId }
-          : c
-      )
-    );
-    addNotification('Personel Atandı', `Müşteriye ${staffName} ustası sabitlendi.`);
+  // Berber: Müşteri Sil
+  const handleDeleteCustomer = (id: number) => {
+    const c = CUS.find((x) => x.id === id);
+    if (!c) return;
+    if (!confirm(c.name + ' silinsin mi? Randevuları kalır ama giriş yapamaz.')) return;
+    const updatedCUS = CUS.filter((x) => x.id !== id);
+    setCUS(updatedCUS);
+    if (me === id) setMe(null);
+    saveToStorage(updatedCUS, appts, log, off, shops);
   };
 
-  const handleUpdateSalonSettings = (settings: Partial<Salon>) => {
-    setActiveSalon((prev) => ({ ...prev, ...settings }));
-    setSalons((prev) => prev.map((s) => (s.id === activeSalon.id ? { ...s, ...settings } : s)));
-    addNotification('Sistem Ayarı', 'Salon otomasyon parametreleri güncellendi.');
+  // Berber: Periyodik Seri Önizleme Oluştur
+  const handleCreateSeriesPreview = () => {
+    const st = seriesStartDate;
+    const n = +seriesInterval || 20;
+    const mo = +seriesMonths || 5;
+    const l: { date: string; moved?: number }[] = [];
+    for (let d = st; d <= addDays(st, mo * 30); d = addDays(d, n)) {
+      l.push({ date: d });
+    }
+    const c = CUS.find((x) => x.id === seriesCustomer);
+    if (!c) {
+      showToast('Önce müşteri tanımlayın');
+      return;
+    }
+    setSeriesPreview({
+      cid: c.id,
+      name: c.name,
+      time: seriesTime || '16:00',
+      l,
+    });
   };
 
-  const handleAddService = (newSrv: Omit<Service, 'id' | 'salonId' | 'isActive'>) => {
-    const created: Service = {
-      ...newSrv,
-      id: `srv-${Date.now()}`,
-      salonId: activeSalon.id,
-      isActive: true,
-    };
-    setServices((prev) => [...prev, created]);
-    addNotification('Hizmet Eklendi', `"${created.name}" hizmet menüsüne eklendi.`);
+  // Berber: Pazar gününü 1 gün önceye al
+  const handleShiftSunday = (index: number) => {
+    if (!seriesPreview) return;
+    const newL = [...seriesPreview.l];
+    newL[index] = { date: addDays(newL[index].date, -1), moved: 1 };
+    setSeriesPreview({ ...seriesPreview, l: newL });
   };
 
-  const handleDeleteService = (serviceId: string) => {
-    setServices((prev) => prev.filter((s) => s.id !== serviceId));
-    addNotification('Hizmet Silindi', 'Hizmet kaldırıldı.');
-  };
+  // Berber: Seriyi Ajandaya Kaydet
+  const handleCommitSeries = () => {
+    if (!seriesPreview) return;
+    if (seriesPreview.l.some((d) => new Date(d.date + 'T12:00:00').getDay() === 0)) {
+      showToast('Önce Pazara denk gelen randevuları taşıyın');
+      return;
+    }
+    let updatedAppts = [...appts];
+    let updatedLog = [...log];
 
-  const handleAddStaff = (name: string, title: string, email: string) => {
-    const created: Staff = {
-      id: `staff-${Date.now()}`,
-      salonId: activeSalon.id,
-      name,
-      title,
-      email,
-      phone: '0532 000 00 00',
-      isActive: true,
-      commissionRate: 40,
-    };
-    setStaffList((prev) => [...prev, created]);
-    addNotification('Personel Eklendi', `Personel "${name}" sisteme eklendi (Giriş: ${email}).`);
-  };
-
-  const handleDeleteStaff = (staffId: string) => {
-    setStaffList((prev) => prev.filter((s) => s.id !== staffId));
-    addNotification('Kadro Güncellendi', 'Stilist kadrodan çıkarıldı.');
-  };
-
-  const handleUpdateStaffOffDays = (staffId: string, weeklyOffDays: number[], leaveDates: string[]) => {
-    setStaffList((prev) =>
-      prev.map((s) => (s.id === staffId ? { ...s, weeklyOffDays, leaveDates } : s))
-    );
-    addNotification('İzin Güncellendi', 'Personelin izin günleri ve gelmediği tarihler güncellendi.');
-  };
-
-  const handleUpdateWorkingHours = (hours: WorkingHours[]) => {
-    setWorkingHours(hours);
-    addNotification('Çalışma Saatleri Güncellendi', 'Salon çalışma saatleri ve mola düzeni kaydedildi.');
-  };
-
-  const handleUpdateAppointmentStatus = (aptId: string, newStatus: Appointment['status']) => {
-    const existing = appointments.find((a) => a.id === aptId);
-    const prevStatus = existing?.status;
-
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === aptId ? { ...a, status: newStatus } : a))
-    );
-
-    if (existing && prevStatus && prevStatus !== newStatus) {
-      const salon = salons.find((s) => s.id === existing.salonId) || activeSalon;
-      const actorName = currentUser ? currentUser.name : 'Murat Can (Usta)';
-      const actorRole = currentUser ? currentUser.role : 'barber_staff';
-
-      const newLog: AuditLog = {
-        id: `log-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        actorName,
-        actorRole,
-        salonId: existing.salonId,
-        salonName: salon.name,
-        action: newStatus === 'cancelled' ? 'appointment_cancel' : 'status_change',
-        description: `${existing.customerName} randevusu "${newStatus}" durumuna güncellendi.`,
-        targetType: 'appointment',
-        targetId: aptId,
-        previousState: { status: prevStatus },
-        newState: { status: newStatus },
-        isReversed: false,
+    seriesPreview.l.forEach((d, i) => {
+      const newA: AppointmentItem = {
+        id: Date.now() + i,
+        cid: seriesPreview.cid,
+        name: seriesPreview.name,
+        svc: 1,
+        stf: 1,
+        date: d.date,
+        time: seriesPreview.time,
+        st: 'onayli',
+        chips: [],
       };
-      setAuditLogs((prev) => [newLog, ...prev]);
-    }
-
-    addNotification(
-      'Durum Değişti',
-      `Randevu durumu "${
-        newStatus === 'completed'
-          ? 'Tamamlandı'
-          : newStatus === 'in_chair'
-          ? 'Koltukta / Tıraş Başladı'
-          : newStatus === 'cancelled'
-          ? 'İptal'
-          : newStatus === 'no_show'
-          ? 'Gelmedi (No-Show)'
-          : 'Onaylı'
-      }" yapıldı.`
-    );
-  };
-
-  // SÜPER ADMİN: ANINDA MÜDAHALE (RANDEVU DÜZENLEME, USTA AKTARMA, SAAT DEĞİŞTİRME)
-  const handleAdminUpdateAppointment = (aptId: string, updates: Partial<Appointment>, reason?: string) => {
-    const existing = appointments.find((a) => a.id === aptId);
-    if (!existing) return;
-
-    const previousState: Partial<Appointment> = {};
-    Object.keys(updates).forEach((k) => {
-      const key = k as keyof Appointment;
-      // @ts-ignore
-      previousState[key] = existing[key];
+      updatedAppts.push(newA);
+      updatedLog = addLog(seriesPreview.name + ' seri randevu #' + (i + 1), newA, { ...newA, st: 'iptal' }, updatedLog);
     });
 
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === aptId ? { ...a, ...updates } : a))
-    );
-
-    const salon = salons.find((s) => s.id === existing.salonId) || activeSalon;
-    const newLog: AuditLog = {
-      id: `log-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      actorName: currentUser?.name || 'Salih Yıldız (Süper Admin)',
-      actorRole: 'admin',
-      salonId: existing.salonId,
-      salonName: salon.name,
-      action: updates.staffId ? 'staff_reassign' : updates.startTime || updates.appointmentDate ? 'appointment_reschedule' : 'status_change',
-      description: `Acil Müdahale: ${existing.customerName} randevusu güncellendi (${reason || 'Admin Müdahalesi'}).`,
-      targetType: 'appointment',
-      targetId: aptId,
-      previousState,
-      newState: updates,
-      isReversed: false,
-    };
-    setAuditLogs((prev) => [newLog, ...prev]);
-    addNotification('Acil Müdahale Yapıldı', `${existing.customerName} randevusuna başarıyla müdahale edildi.`);
+    setAppts(updatedAppts);
+    setLog(updatedLog);
+    saveToStorage(CUS, updatedAppts, updatedLog, off, shops);
+    showToast(seriesPreview.l.length + ' randevu ajandaya işlendi');
+    setSeriesPreview(null);
   };
 
-  // SÜPER ADMİN: TEK TUŞLA İŞLEM GERİ ALMA (ROLLBACK / UNDO)
-  const handleRollbackAuditLog = (logId: string) => {
-    const log = auditLogs.find((l) => l.id === logId);
-    if (!log || log.isReversed) return;
-
-    if (log.targetType === 'appointment' && log.previousState) {
-      setAppointments((prev) =>
-        prev.map((a) => (a.id === log.targetId ? { ...a, ...log.previousState } : a))
-      );
-
-      // Log kaydını geri alındı olarak işaretle
-      setAuditLogs((prev) =>
-        prev.map((l) => (l.id === logId ? { ...l, isReversed: true } : l))
-      );
-
-      // Yeni bir geri alma denetim kaydı oluştur
-      const rollbackLog: AuditLog = {
-        id: `log-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        actorName: currentUser?.name || 'Salih Yıldız (Süper Admin)',
-        actorRole: 'admin',
-        salonId: log.salonId,
-        salonName: log.salonName,
-        action: 'rollback',
-        description: `↩️ Geri Alma: "${log.description}" işlemi geri alındı ve önceki haline döndürüldü.`,
-        targetType: 'appointment',
-        targetId: log.targetId,
-        isReversed: false,
-      };
-      setAuditLogs((prev) => [rollbackLog, ...prev]);
-
-      addNotification('İşlem Geri Alındı', `İşlem başarıyla geri alındı ve randevu eski durumuna döndürüldü.`);
+  // Admin: Müdahaleyi Kaydet
+  const handleSaveAdminIntervention = (id: number) => {
+    const a = appts.find((x) => x.id === id);
+    if (!a) return;
+    if (busy(editStaffId, a.date, editTimeVal, id)) {
+      showToast('Seçilen usta o saatte dolu');
+      return;
     }
-  };
-
-  // SÜPER ADMİN: SALONU CANLI YÖNET / TAKLİT ET (IMPERSONATE)
-  const handleImpersonateSalon = (salonId: string) => {
-    const targetSalon = salons.find((s) => s.id === salonId);
-    if (!targetSalon) return;
-    setActiveSalon(targetSalon);
-    setCurrentView('barber');
-    addNotification('Salon Koltuğuna Geçildi', `${targetSalon.name} yönetim ekranına canlı geçildi.`);
-  };
-
-  const handleToggleSalonStatus = (salonId: string) => {
-    setSalons((prev) =>
-      prev.map((s) => (s.id === salonId ? { ...s, isActive: !s.isActive } : s))
+    setEditAptId(null);
+    setApp(
+      a.id,
+      { stf: editStaffId, time: editTimeVal },
+      'Admin müdahalesi: ' + a.name + ' → ' + sf(editStaffId).n + ' ' + editTimeVal + ' (' + editNote + ')'
     );
+    showToast('Güncellendi · WhatsApp onayı gönderildi');
   };
 
-  const handleAddSalon = (
-    name: string,
-    slug: string,
-    phone: string,
-    city?: string,
-    district?: string,
-    address?: string
-  ) => {
-    const newSalon: Salon = {
-      id: `salon-${Date.now()}`,
-      name,
-      slug,
-      phone,
-      city: city || 'İstanbul',
-      district: district || 'Kadıköy',
-      address: address || `${district || 'Kadıköy'}, ${city || 'İstanbul'}`,
-      autoConfirm: true,
-      autoComplete: true,
-      isActive: true,
-      subscriptionStatus: 'active',
-      createdAt: new Date().toISOString(),
-    };
-    setSalons((prev) => [...prev, newSalon]);
-    addNotification('Yeni İşletme Kaydedildi', `"${name}" (${newSalon.district}, ${newSalon.city}) sisteme eklendi.`);
+  // Admin: Tek Tuşla Geri Al (Rollback)
+  const handleRollback = (index: number) => {
+    const l = log[index];
+    if (!l || l.u) return;
+    const a = appts.find((x) => x.id === l.a);
+    const p = JSON.parse(l.prev);
+    if (!a) return;
+
+    const updatedAppts = appts.map((item) => (item.id === a.id ? { ...item, ...p } : item));
+    const updatedLog = log.map((item, idx) => (idx === index ? { ...item, u: true } : item));
+
+    setAppts(updatedAppts);
+    setLog(updatedLog);
+    saveToStorage(CUS, updatedAppts, updatedLog, off, shops);
+    showToast('Randevu eski haline getirildi');
   };
 
-  const handleAddAdmin = (name: string, email: string) => {
-    const newAdmin: SystemAdmin = {
-      id: `admin-${Date.now()}`,
-      name,
-      email,
-      isPrimary: false,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    };
-    setAdmins((prev) => [...prev, newAdmin]);
-    addNotification('Yeni Admin Eklendi', `${name} (${email}) Süper Admin yetkisiyle sisteme kaydedildi.`);
+  // Admin Demo İptal
+  const handleDemoCancel = () => {
+    const a = appts.find((x) => x.name === 'Mert B.');
+    if (!a) return;
+    if (a.st === 'iptal') {
+      showToast('Zaten iptal');
+      return;
+    }
+    setApp(a.id, { st: 'iptal' }, 'Çırak Ali, Mert B. randevusunu iptal etti (Onaylı → İptal)');
   };
 
-  const handleToggleAdminStatus = (adminId: string) => {
-    setAdmins((prev) =>
-      prev.map((a) => (a.id === adminId && !a.isPrimary ? { ...a, isActive: !a.isActive } : a))
-    );
+  // Admin: Yeni Salon Aç
+  const handleCreateShop = () => {
+    const n = newShopName.trim();
+    const u = newShopSlug.trim();
+    if (!n || !u) {
+      showToast('Salon adı ve web adresi gerekli');
+      return;
+    }
+    const updatedShops = [
+      ...shops,
+      {
+        n,
+        u: u.replace(/\s+/g, '-').toLowerCase(),
+        a: newShopAddress || '-',
+        t: newShopPhone || '-',
+      },
+    ];
+    setShops(updatedShops);
+    setNewShopName('');
+    setNewShopSlug('');
+    setNewShopAddress('');
+    setNewShopPhone('');
+    saveToStorage(CUS, appts, log, off, updatedShops);
+    showToast('Salon açıldı');
   };
 
-  const handleDeleteAdmin = (adminId: string) => {
-    setAdmins((prev) => prev.filter((a) => a.id !== adminId || a.isPrimary));
-    addNotification('Admin Silindi', 'Yönetici yetkisi kaldırıldı.');
-  };
+  // 7 günlük hızlı tarih dizisi
+  const customerDays = [...Array(7)].map((_, i) => addDays(today, i));
 
-  if (!currentUser) {
-    return <AuthScreen onLoginSuccess={handleLoginSuccess} admins={admins} />;
-  }
+  // Berber Görünümü Günlük Verileri
+  const todayAppts = appts.filter((a) => a.date === today).sort((a, b) => a.time.localeCompare(b.time));
+  const doneAppts = todayAppts.filter((a) => a.st === 'tamam');
+  const noShowAppts = todayAppts.filter((a) => a.st === 'noshow');
+  const todayKasa = doneAppts.reduce((sum, a) => sum + sv(a.svc).p, 0);
+
+  // Müşterinin Randevuları
+  const myAppointmentsList = currentCustomer
+    ? appts.filter((a) => a.cid === currentCustomer.id).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))
+    : [];
+  const myUpcoming = myAppointmentsList.filter(
+    (a) => a.date >= today && ['onayli', 'geldi', 'koltukta'].includes(a.st)
+  );
+  const myPast = myAppointmentsList.filter((a) => !myUpcoming.includes(a)).reverse();
+
+  // Admin Arama Sonuçları
+  const cleanQ = adminQuery.trim().toLowerCase();
+  const adminSearchResults = cleanQ
+    ? appts.filter((a) => a.name.toLowerCase().includes(cleanQ) && a.st !== 'tamam')
+    : [];
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-slate-50 text-slate-900">
-      <NotificationToast notifications={notifications} onDismiss={dismissNotification} />
-
-      {/* HEADER */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
-              <Scissors className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-sm tracking-tight text-slate-900 uppercase">
-                  BERBERİM
-                </span>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                  {currentUser.role === 'admin'
-                    ? 'SÜPER ADMİN'
-                    : currentUser.role === 'barber_owner'
-                    ? 'SALON SAHİBİ (PATRON)'
-                    : currentUser.role === 'barber_staff'
-                    ? 'PERSONEL STİLİST'
-                    : 'MÜŞTERİ'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 font-medium">Randevu & Koltuk Yönetim Sistemi</p>
-            </div>
+    <>
+      <header>
+        <div className="bar">
+          <div className="logo">
+            💈 Berberim<small>Atelier de Coupe</small>
           </div>
-
-          {/* SÜPER ADMİN GEÇİŞ SEKMELERİ */}
-          {currentUser.role === 'admin' && (
-            <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-              <button
-                onClick={() => setCurrentView('admin')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  currentView === 'admin'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5" /> Yönetim Paneli
-              </button>
-
-              <button
-                onClick={() => setCurrentView('barber')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  currentView === 'barber'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Scissors className="w-3.5 h-3.5" /> Berber Ajandası
-              </button>
-
-              <button
-                onClick={() => setCurrentView('customer')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  currentView === 'customer'
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <User className="w-3.5 h-3.5" /> Müşteri Portalı
-              </button>
-            </div>
-          )}
-
-          {/* SAĞ KULLANICI BİLGİSİ VE ÇIKIŞ */}
-          <div className="flex items-center gap-2.5">
-            {currentUser.role === 'admin' && (
-              <button
-                onClick={() => setShowSettingsModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition"
-                title="Sistem & Bildirim Ayarları (Sadece Süper Admin)"
-              >
-                <Settings className="w-3.5 h-3.5 text-slate-700" />
-                <span className="hidden sm:inline">Ayarlar</span>
-              </button>
-            )}
-
-            <div className="flex items-center gap-2.5 bg-slate-100 px-3 py-1.5 rounded-xl">
-              <div className="w-6 h-6 rounded-md bg-slate-900 text-white font-bold text-xs flex items-center justify-center">
-                {currentUser.name.charAt(0)}
-              </div>
-              <div className="text-left hidden sm:block">
-                <div className="text-xs font-bold text-slate-900 leading-tight">{currentUser.name}</div>
-                <div className="text-[10px] text-slate-500">{currentUser.email || currentUser.phone}</div>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="ml-1 p-1 text-slate-400 hover:text-rose-600 rounded transition"
-                title="Çıkış Yap"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </button>
-            </div>
+          <div className="tabs">
+            <button className={view === 'c' ? 'on' : ''} onClick={() => setView('c')}>
+              Müşteri
+            </button>
+            <button className={view === 'b' ? 'on' : ''} onClick={() => setView('b')}>
+              Berber
+            </button>
+            <button className={view === 'a' ? 'on' : ''} onClick={() => setView('a')}>
+              Süper Admin
+            </button>
           </div>
         </div>
       </header>
 
-      {/* ANA İÇERİK ALANI */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
-        {currentView === 'customer' && (
-          <CustomerBooking
-            currentUser={currentUser}
-            salon={activeSalon}
-            staffList={staffList}
-            services={services}
-            appointments={appointments}
-            customers={customers}
-            workingHours={workingHours}
-            onBookAppointment={handleBookAppointment}
-            onAddBatchAppointments={handleAddBatchAppointments}
-            onCancelAppointment={handleCancelAppointment}
-            onLogout={handleLogout}
-          />
-        )}
-
-        {currentView === 'barber' && (
-          <BarberDashboard
-            currentUser={currentUser}
-            salon={activeSalon}
-            staffList={staffList}
-            services={services}
-            appointments={appointments}
-            customers={customers}
-            workingHours={workingHours}
-            onUpdateSalonSettings={handleUpdateSalonSettings}
-            onAddService={handleAddService}
-            onDeleteService={handleDeleteService}
-            onAddStaff={handleAddStaff}
-            onDeleteStaff={handleDeleteStaff}
-            onUpdateStaffOffDays={handleUpdateStaffOffDays}
-            onUpdateWorkingHours={handleUpdateWorkingHours}
-            onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
-            onAddQuickAppointment={handleAddQuickAppointment}
-            onAddCustomer={handleAddCustomer}
-            onUpdateCustomerNote={handleUpdateCustomerNote}
-            onUpdateCustomerStaff={handleUpdateCustomerStaff}
-            onAddBatchAppointments={handleAddBatchAppointments}
-            onLogout={handleLogout}
-          />
-        )}
-
-        {currentView === 'admin' && (
-          <AdminDashboard
-            salons={salons}
-            staffList={staffList}
-            customers={customers}
-            services={services}
-            appointments={appointments}
-            admins={admins}
-            auditLogs={auditLogs}
-            onToggleSalonStatus={handleToggleSalonStatus}
-            onAddSalon={handleAddSalon}
-            onAddAdmin={handleAddAdmin}
-            onToggleAdminStatus={handleToggleAdminStatus}
-            onDeleteAdmin={handleDeleteAdmin}
-            onAdminUpdateAppointment={handleAdminUpdateAppointment}
-            onRollbackAuditLog={handleRollbackAuditLog}
-            onImpersonateSalon={handleImpersonateSalon}
-          />
-        )}
-      </main>
-
-      {/* SİSTEM & BİLDİRİM AYARLARI MODALI */}
-      {showSettingsModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 max-w-lg w-full max-h-[85vh] overflow-y-auto space-y-5 shadow-xl">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-slate-900" />
-                <h3 className="font-bold text-slate-900 text-base">Sistem & Bildirim Ayarları</h3>
+      <main>
+        {/* ========================================================================= */}
+        {/* 1. MÜŞTERİ GÖRÜNÜMÜ                                                       */}
+        {/* ========================================================================= */}
+        {view === 'c' && (
+          <section id="v-c">
+            {!currentCustomer ? (
+              <div className="card" style={{ maxWidth: '420px', margin: '30px auto' }}>
+                <h2>Giriş Yap</h2>
+                <p className="sub">
+                  Berberin sana cep telefonu ve şifreni verdi. Bir kez giriş yap, oturumun açık kalır.
+                </p>
+                <form onSubmit={handleLogin}>
+                  <label>
+                    Cep telefonu
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="05xx xxx xx xx"
+                      autoComplete="username"
+                      value={loginPhone}
+                      onChange={(e) => setLoginPhone(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Şifre
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      value={loginPw}
+                      onChange={(e) => setLoginPw(e.target.value)}
+                    />
+                  </label>
+                  <button type="submit" className="btn" style={{ width: '100%' }}>
+                    Giriş Yap
+                  </button>
+                </form>
               </div>
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className="text-slate-400 hover:text-slate-700 font-bold p-1 text-base"
-              >
-                ✕
-              </button>
+            ) : C.done ? (
+              <>
+                <div className="card" style={{ textAlign: 'center' }}>
+                  <h2>✅ Randevun onaylandı</h2>
+                  <p className="sub">Randevu berberin ekranına anında düştü.</p>
+                  <button
+                    className="btn"
+                    onClick={() =>
+                      setC((prev) => ({
+                        ...prev,
+                        done: false,
+                        time: null,
+                        chips: [],
+                      }))
+                    }
+                  >
+                    Yeni randevu
+                  </button>
+                </div>
+                {/* Gelecek ve Geçmiş Randevularım */}
+                <div className="card">
+                  <h3>📅 Gelecek Randevularım</h3>
+                  {myUpcoming.length > 0 ? (
+                    myUpcoming.map((a) => (
+                      <div key={a.id} className="li">
+                        <div>
+                          <b>{sv(a.svc).n}</b>
+                          <small>
+                            {fd(a.date)} · {a.time} · {sf(a.stf).n} · ₺{sv(a.svc).p}
+                          </small>
+                        </div>
+                        <span className="badge">{LB[a.st]}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="sub">Gelecek randevun yok.</div>
+                  )}
+                </div>
+                <div className="card">
+                  <h3>🕘 Geçmiş Randevularım</h3>
+                  {myPast.length > 0 ? (
+                    myPast.map((a) => (
+                      <div key={a.id} className="li">
+                        <div>
+                          <b>{sv(a.svc).n}</b>
+                          <small>
+                            {fd(a.date)} · {a.time} · {sf(a.stf).n} · ₺{sv(a.svc).p}
+                          </small>
+                        </div>
+                        <span className="badge">{LB[a.st]}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="sub">Geçmiş randevun yok.</div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <h2>Online Randevu</h2>
+                <p className="sub">
+                  berberim.app/atelier-de-coupe · Hoş geldin, <b>{currentCustomer.name}</b> ·{' '}
+                  <a
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleLogout();
+                    }}
+                    style={{ color: 'var(--mut)' }}
+                  >
+                    Çıkış
+                  </a>
+                </p>
+
+                {/* 1. Hizmet */}
+                <div className="card">
+                  <h3>1 · Hizmet</h3>
+                  <div className="grid">
+                    {SV.map((s) => (
+                      <button
+                        key={s.id}
+                        className={`opt ${C.svc === s.id ? 'sel' : ''}`}
+                        onClick={() => setC((prev) => ({ ...prev, svc: s.id, time: null }))}
+                      >
+                        <b>{s.n}</b>
+                        <span>
+                          {s.d} dk · ₺{s.p}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Usta */}
+                <div className="card">
+                  <h3>2 · Usta</h3>
+                  <div className="gold">⭐ Size Atanan Sabit Ustanız: Murat Can</div>
+                  <div className="grid">
+                    {ST.map((s) => (
+                      <button
+                        key={s.id}
+                        className={`opt ${C.stf === s.id ? 'sel' : ''}`}
+                        onClick={() => setC((prev) => ({ ...prev, stf: s.id, time: null }))}
+                      >
+                        <b>{s.n}</b>
+                        <span>
+                          {off[s.id] ? '⛔ Bugün izinli' : s.id === 1 ? 'Sabit ustan' : 'Müsait'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Tarih ve Saat */}
+                <div className="card">
+                  <h3>3 · Tarih ve saat</h3>
+                  <div className="days">
+                    {customerDays.map((d) => {
+                      const x = new Date(d + 'T12:00:00');
+                      const isClosed = x.getDay() === CLOSED_DAY;
+                      return (
+                        <button
+                          key={d}
+                          className={`day ${C.date === d ? 'sel' : ''}`}
+                          disabled={isClosed}
+                          onClick={() => setC((prev) => ({ ...prev, date: d, time: null }))}
+                        >
+                          <small>{DN[x.getDay()].slice(0, 3)}</small>
+                          <b>{x.getDate()}</b>
+                          <small>{isClosed ? 'Kapalı' : MON[x.getMonth()]}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="slots">
+                    {slots().map((t) => {
+                      const [c, l] = slotState(C.stf, C.date, t);
+                      return (
+                        <button
+                          key={t}
+                          className={`slot ${c} ${C.time === t ? 'sel' : ''}`}
+                          disabled={c === 'off'}
+                          onClick={() => setC((prev) => ({ ...prev, time: t }))}
+                        >
+                          {t}
+                          <small>{C.time === t ? 'Seçildi' : l}</small>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Berber Tercihleri */}
+                <div className="card">
+                  <h3>4 · Berber tercihlerin</h3>
+                  <div className="chips">
+                    {CHIPS.map((chip) => (
+                      <button
+                        key={chip}
+                        className={`chip ${C.chips.includes(chip) ? 'sel' : ''}`}
+                        onClick={() => toggleChip(chip)}
+                      >
+                        🏷️ {chip}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="btn" disabled={!C.time} onClick={handleBook}>
+                    Randevuyu onayla{C.time ? ' · ' + fd(C.date) + ' ' + C.time : ''}
+                  </button>
+                </div>
+
+                {/* Gelecek ve Geçmiş Randevularım */}
+                <div className="card">
+                  <h3>📅 Gelecek Randevularım</h3>
+                  {myUpcoming.length > 0 ? (
+                    myUpcoming.map((a) => (
+                      <div key={a.id} className="li">
+                        <div>
+                          <b>{sv(a.svc).n}</b>
+                          <small>
+                            {fd(a.date)} · {a.time} · {sf(a.stf).n} · ₺{sv(a.svc).p}
+                          </small>
+                        </div>
+                        <span className="badge">{LB[a.st]}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="sub">Gelecek randevun yok.</div>
+                  )}
+                </div>
+                <div className="card">
+                  <h3>🕘 Geçmiş Randevularım</h3>
+                  {myPast.length > 0 ? (
+                    myPast.map((a) => (
+                      <div key={a.id} className="li">
+                        <div>
+                          <b>{sv(a.svc).n}</b>
+                          <small>
+                            {fd(a.date)} · {a.time} · {sf(a.stf).n} · ₺{sv(a.svc).p}
+                          </small>
+                        </div>
+                        <span className="badge">{LB[a.st]}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="sub">Geçmiş randevun yok.</div>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 2. BERBER PANELİ                                                          */}
+        {/* ========================================================================= */}
+        {view === 'b' && (
+          <section id="v-b">
+            <h2>Berber Paneli</h2>
+            <p className="sub">
+              Çalışma: 08:00–21:00 · Yemek molası 13:00–14:00 otomatik kilitli · Pazar kapalı
+            </p>
+
+            {/* Personel Durumu */}
+            <div className="card">
+              <h3>👥 Personel durumu</h3>
+              {ST.map((s) => (
+                <div key={s.id} className="li">
+                  <b>{s.n}</b>
+                  <button
+                    className={`btn ${off[s.id] ? '' : 'gh'}`}
+                    onClick={() => {
+                      const updatedOff = { ...off, [s.id]: !off[s.id] };
+                      setOff(updatedOff);
+                      saveToStorage(CUS, appts, log, updatedOff, shops);
+                    }}
+                  >
+                    {off[s.id] ? '⛔ İzinli (geri al)' : 'Bugün İzinli yap'}
+                  </button>
+                </div>
+              ))}
             </div>
 
-            {/* 1. Banka Tarzı Push Bildirimleri */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Bell className="w-4 h-4 text-amber-600" />
-                  <span className="text-xs font-bold text-slate-900">Banka Tarzı Cihaz Bildirimleri</span>
+            {/* Canlı Koltuk Akışı */}
+            <h3>📱 Canlı Koltuk Akışı</h3>
+            {todayAppts.length > 0 ? (
+              todayAppts.map((a) => (
+                <div key={a.id} className={`ac ${a.st}`}>
+                  <div className="top">
+                    <div>
+                      <b style={{ fontSize: '17px' }}>
+                        {a.time} · {a.name}
+                      </b>
+                      <div style={{ color: 'var(--mut)' }}>
+                        {sv(a.svc).n} · {sf(a.stf).n} · ₺{sv(a.svc).p}
+                      </div>
+                    </div>
+                    <span className="badge">{LB[a.st]}</span>
+                  </div>
+
+                  {a.chips.length > 0 && (
+                    <div className="tg">{a.chips.map((c) => '🏷️ ' + c).join(' | ')}</div>
+                  )}
+
+                  <div className="acts">
+                    {a.st === 'onayli' && (
+                      <>
+                        <button
+                          className="big"
+                          style={{ background: 'var(--blue)' }}
+                          onClick={() => handleStatusChange(a.id, 'geldi')}
+                        >
+                          👋 Geldi
+                        </button>
+                        <button
+                          className="big"
+                          style={{ background: 'var(--mut)' }}
+                          onClick={() => handleStatusChange(a.id, 'noshow')}
+                        >
+                          Gelmedi
+                        </button>
+                      </>
+                    )}
+                    {a.st === 'geldi' && (
+                      <button
+                        className="big"
+                        style={{ background: 'var(--pur)' }}
+                        onClick={() => handleStatusChange(a.id, 'koltukta')}
+                      >
+                        ✂️ Koltukta
+                      </button>
+                    )}
+                    {a.st === 'koltukta' && (
+                      <button
+                        className="big"
+                        style={{ background: 'var(--ok)' }}
+                        onClick={() => handleFinish(a.id)}
+                      >
+                        ✅ Tamamla
+                      </button>
+                    )}
+                  </div>
                 </div>
-                {nativeNotifStatus === 'granted' ? (
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                    🟢 Aktif
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-bold text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
-                    İzin Bekliyor
-                  </span>
-                )}
+              ))
+            ) : (
+              <div className="card">Bugün randevu yok.</div>
+            )}
+
+            {/* Müşteri Tanımla */}
+            <div className="card">
+              <h3>👤 Müşteri Tanımla</h3>
+              <p className="sub">Müşteriyi sen tanımlarsın; telefon ve şifreyi ona ilet.</p>
+              <div className="f2">
+                <div>
+                  <label>
+                    Ad Soyad
+                    <input
+                      value={newCusName}
+                      onChange={(e) => setNewCusName(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label>
+                    Cep telefonu
+                    <input
+                      type="tel"
+                      value={newCusPhone}
+                      onChange={(e) => setNewCusPhone(e.target.value)}
+                    />
+                  </label>
+                </div>
+                <div>
+                  <label>
+                    Şifre
+                    <input
+                      placeholder="en az 4 karakter"
+                      value={newCusPw}
+                      onChange={(e) => setNewCusPw(e.target.value)}
+                    />
+                  </label>
+                </div>
               </div>
-              <p className="text-[11px] text-slate-500">
-                Randevu onayları, usta çağrıları ve randevuya 49 dakika kala hatırlatmaları kilit ekranınıza sesli bildirim olarak düşer.
-              </p>
-              {nativeNotifStatus !== 'granted' ? (
-                <button
-                  onClick={requestNativeNotification}
-                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-2"
-                >
-                  <Bell className="w-3.5 h-3.5" /> Bildirim İznini Etkinleştir
-                </button>
+              <button className="btn" onClick={handleAddCustomer}>
+                Müşteriyi Ekle
+              </button>
+
+              <div style={{ marginTop: '14px' }}>
+                {CUS.map((c) => (
+                  <div key={c.id} className="li">
+                    <div>
+                      <b>{c.name}</b>
+                      <small>
+                        📱 {c.phone} · 🔑 {c.pw} · {appts.filter((a) => a.cid === c.id).length} randevu
+                      </small>
+                    </div>
+                    <div className="acts">
+                      <button className="btn gh" onClick={() => handleResetCustomerPw(c.id)}>
+                        Şifre Değiştir
+                      </button>
+                      <button className="btn gh" onClick={() => handleDeleteCustomer(c.id)}>
+                        Sil
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Periyodik Randevu Serisi */}
+            <div className="card">
+              <h3>🔁 Periyodik Randevu Serisi</h3>
+              {!seriesPreview ? (
+                <>
+                  <p className="sub">Daimi müşteri için tek seferde takvim oluştur.</p>
+                  <div className="f2">
+                    <div>
+                      <label>
+                        Müşteri
+                        <select
+                          value={seriesCustomer}
+                          onChange={(e) => setSeriesCustomer(+e.target.value)}
+                        >
+                          {CUS.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div>
+                      <label>
+                        Başlangıç
+                        <input
+                          type="date"
+                          value={seriesStartDate}
+                          onChange={(e) => setSeriesStartDate(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <div>
+                      <label>
+                        Döngü (gün)
+                        <input
+                          type="number"
+                          value={seriesInterval}
+                          onChange={(e) => setSeriesInterval(+e.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <div>
+                      <label>
+                        Saat
+                        <input
+                          type="time"
+                          value={seriesTime}
+                          onChange={(e) => setSeriesTime(e.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <div>
+                      <label>
+                        Süre (ay)
+                        <input
+                          type="number"
+                          value={seriesMonths}
+                          onChange={(e) => setSeriesMonths(+e.target.value)}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  <button className="btn" onClick={handleCreateSeriesPreview}>
+                    Seri Oluştur
+                  </button>
+                </>
               ) : (
-                <button
-                  onClick={() => addNotification('Test Bildirimi', 'Banka tarzı anlık bildirim sistemi sorunsuz çalışıyor! 💈')}
-                  className="w-full py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2"
-                >
-                  🔔 Test Bildirimi Gönder
-                </button>
+                <>
+                  {seriesPreview.l.map((d, i) => {
+                    const sun = new Date(d.date + 'T12:00:00').getDay() === 0;
+                    return (
+                      <div key={i} className="li">
+                        <div>
+                          {i + 1}.{' '}
+                          {sun ? (
+                            <span className="warn">⚠️ {fd(d.date)} Pazar (kapalı)</span>
+                          ) : d.moved ? (
+                            <span className="warn">⚠️ {fd(d.date)} (Pazardan Alındı)</span>
+                          ) : (
+                            fd(d.date)
+                          )}{' '}
+                          · {seriesPreview.time}
+                        </div>
+                        {sun && (
+                          <button className="btn gh" onClick={() => handleShiftSunday(i)}>
+                            ⬅️ 1 Gün Önceye Al
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="acts" style={{ marginTop: '14px' }}>
+                    <button className="btn" onClick={handleCommitSeries}>
+                      {seriesPreview.l.length} Randevuyu Takvime İşle
+                    </button>
+                    <button className="btn gh" onClick={() => setSeriesPreview(null)}>
+                      Vazgeç
+                    </button>
+                  </div>
+                </>
               )}
             </div>
 
-            {/* 2. Mobil Uygulama REST API */}
-            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5">
-              <div className="flex items-center gap-2">
-                <Smartphone className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-bold text-slate-900">Mobil Uygulama API Motoru</span>
+            {/* Gün Sonu Özeti */}
+            <div className="card">
+              <h3>🌙 Gün Sonu Özeti</h3>
+              <div className="stats">
+                <div className="stat">
+                  <b>₺{todayKasa}</b>
+                  <span>Bugünkü Kasa</span>
+                </div>
+                <div className="stat">
+                  <b>{doneAppts.length}</b>
+                  <span>Tamamlanan</span>
+                </div>
+                <div className="stat">
+                  <b>{noShowAppts.length}</b>
+                  <span>Gelmedi (No-Show)</span>
+                </div>
               </div>
-              <p className="text-[11px] text-slate-500">
-                Flutter veya React Native mobil uygulamanız için hazır REST API uç noktaları aktiftir:
-              </p>
-              <div className="space-y-1.5 font-mono text-[11px]">
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-blue-700 font-bold">
-                  GET /api/v1/salons/{'{slug}'}
+              {ST.map((s) => {
+                const k = doneAppts
+                  .filter((a) => a.stf === s.id)
+                  .reduce((x, a) => x + sv(a.svc).p, 0);
+                return (
+                  <div key={s.id} className="li">
+                    <span>{s.n}</span>
+                    <b>Hakediş (%40): ₺{Math.round(k * 0.4)}</b>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ========================================================================= */}
+        {/* 3. SÜPER ADMİN                                                            */}
+        {/* ========================================================================= */}
+        {view === 'a' && (
+          <section id="v-a">
+            <h2>Süper Admin · Salih Bey</h2>
+            <p className="sub">
+              Supabase doluluk: %8.9 · {shops.length} salon · Lisans: aktif
+            </p>
+
+            {/* Yeni Salon Aç */}
+            <div className="card">
+              <h3>🏪 Yeni Salon Aç</h3>
+              <div className="f2">
+                <div>
+                  <label>
+                    Salon adı
+                    <input
+                      value={newShopName}
+                      onChange={(e) => setNewShopName(e.target.value)}
+                    />
+                  </label>
                 </div>
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-blue-700 font-bold">
-                  GET /api/v1/slots?staffId=...&date=YYYY-MM-DD
+                <div>
+                  <label>
+                    Web adresi
+                    <input
+                      placeholder="salon-adi"
+                      value={newShopSlug}
+                      onChange={(e) => setNewShopSlug(e.target.value)}
+                    />
+                  </label>
                 </div>
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200 text-emerald-700 font-bold">
-                  POST /api/v1/appointments
+                <div>
+                  <label>
+                    Açık adres
+                    <input
+                      value={newShopAddress}
+                      onChange={(e) => setNewShopAddress(e.target.value)}
+                    />
+                  </label>
                 </div>
+                <div>
+                  <label>
+                    Telefon
+                    <input
+                      value={newShopPhone}
+                      onChange={(e) => setNewShopPhone(e.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+              <button className="btn" onClick={handleCreateShop}>
+                Salonu Oluştur
+              </button>
+
+              <div style={{ marginTop: '14px' }}>
+                {shops.map((s, idx) => (
+                  <div key={idx} className="li">
+                    <div>
+                      <b>{s.n}</b>
+                      <small>
+                        berberim.app/{s.u} · {s.a} · {s.t}
+                      </small>
+                    </div>
+                    <span className="seal">Lisans ✓</span>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* 3. Veritabanı ve Platform Durumu */}
-            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between text-xs">
-              <div>
-                <div className="font-bold text-slate-900">Supabase Canlı Veritabanı</div>
-                <div className="text-[11px] font-mono text-slate-500 mt-0.5">crlduukuhevovagorsce.supabase.co</div>
-              </div>
-              <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-bold border border-emerald-200 text-[11px]">
-                Bağlı
-              </span>
+            {/* Canlı Müdahale Masası */}
+            <div className="card">
+              <h3>🚨 Canlı Müdahale Masası</h3>
+              <input
+                placeholder="Müşteri ara (örn. Selim)"
+                value={adminQuery}
+                onChange={(e) => setAdminQuery(e.target.value)}
+              />
+              {adminSearchResults.length > 0 ? (
+                adminSearchResults.map((a) =>
+                  editAptId === a.id ? (
+                    <div key={a.id} className="ac" style={{ marginTop: '10px' }}>
+                      <b>{a.name}</b>
+                      <div className="f2">
+                        <div>
+                          <label>
+                            Usta
+                            <select
+                              value={editStaffId}
+                              onChange={(e) => setEditStaffId(+e.target.value)}
+                            >
+                              {ST.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.n}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <div>
+                          <label>
+                            Saat
+                            <input
+                              type="time"
+                              value={editTimeVal}
+                              onChange={(e) => setEditTimeVal(e.target.value)}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <label>
+                        Not
+                        <input
+                          value={editNote}
+                          onChange={(e) => setEditNote(e.target.value)}
+                        />
+                      </label>
+                      <div className="acts">
+                        <button className="btn" onClick={() => handleSaveAdminIntervention(a.id)}>
+                          Kaydet &amp; Müdahale Et
+                        </button>
+                        <button className="btn gh" onClick={() => setEditAptId(null)}>
+                          Kapat
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={a.id} className="li">
+                      <div>
+                        <b>{a.name}</b>
+                        <small>
+                          {fd(a.date)} {a.time} · {sf(a.stf).n} · {LB[a.st]}
+                        </small>
+                      </div>
+                      <button
+                        className="btn"
+                        onClick={() => {
+                          setEditAptId(a.id);
+                          setEditStaffId(a.stf);
+                          setEditTimeVal(a.time);
+                        }}
+                      >
+                        ⚙️ Müdahale Et
+                      </button>
+                    </div>
+                  )
+                )
+              ) : cleanQ ? (
+                <div className="sub" style={{ marginTop: '8px' }}>
+                  Sonuç yok.
+                </div>
+              ) : null}
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* FOOTER */}
-      <footer className="border-t border-slate-200 bg-white py-3.5 px-4 text-center text-[11px] text-slate-500">
-        Berberim • Kurumsal Randevu & Koltuk Yönetim Sistemi
-      </footer>
-    </div>
+            {/* İşlem Geçmişi (Audit Log) */}
+            <div className="card">
+              <h3>📜 İşlem Geçmişi (Audit Log)</h3>
+              {log.length > 0 ? (
+                log.map((l, i) => (
+                  <div key={l.id} className={`li log ${l.u ? 'u' : ''}`}>
+                    <div>
+                      <b className={l.u ? '' : 'red'}>{l.t}</b> · {l.txt}
+                    </div>
+                    {l.u ? (
+                      <span className="seal">✓ Geri Alındı</span>
+                    ) : (
+                      <button className="btn gh" onClick={() => handleRollback(i)}>
+                        ↩️ Tek Tuşla Geri Al
+                      </button>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="sub">Henüz işlem yok. Berber panelinden bir işlem yapın.</div>
+              )}
+
+              <div className="acts" style={{ marginTop: '12px' }}>
+                <button className="btn gh" onClick={handleDemoCancel}>
+                  Demo: Çırak VIP randevuyu iptal etsin
+                </button>
+              </div>
+            </div>
+          </section>
+        )}
+      </main>
+
+      {/* Toast Bildirim */}
+      {toastMsg && <div className="toast">{toastMsg}</div>}
+    </>
   );
 }
